@@ -1,0 +1,18 @@
+// 暫定ルール(タスク1-3: Firebase Emulator Suite設定のスコープ内で作成)
+//
+// firebase.jsonがfirestoreエミュレータ起動時にrulesファイルの存在を要求するため、
+// 開発用に「全read/write許可」の最小限のルールを暫定的に置いている。
+//
+// 本番相当のルール(read: publishedのみ許可、write: 管理者のみ許可 等)は
+// requirements.md「4. データモデル」の セキュリティルール方針 に従い、
+// progress.txt タスク1-5(Firestoreセキュリティルール)で本実装する。
+// このファイルはタスク1-5で置き換えられる想定。
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

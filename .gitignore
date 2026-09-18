@@ -48,3 +48,7 @@ next-env.d.ts
 
 # Claude Code ローカル権限設定(個人環境依存のため管理対象外)
 .claude/settings.local.json
+
+# Firebase Emulator Suite
+.firebase/
+*-debug.log
