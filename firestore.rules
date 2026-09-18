@@ -1,18 +1,58 @@
-// 暫定ルール(タスク1-3: Firebase Emulator Suite設定のスコープ内で作成)
+// Daychi COFFEE MAP 本番Firestoreセキュリティルール(タスク1-5)
 //
-// firebase.jsonがfirestoreエミュレータ起動時にrulesファイルの存在を要求するため、
-// 開発用に「全read/write許可」の最小限のルールを暫定的に置いている。
+// requirements.md「4. データモデル」セキュリティルール方針:
+//   - read: status == "published" のドキュメントのみ誰でも可(performers/tagsは全read可)
+//   - write(create/update/delete): 管理者のみ
 //
-// 本番相当のルール(read: publishedのみ許可、write: 管理者のみ許可 等)は
-// requirements.md「4. データモデル」の セキュリティルール方針 に従い、
-// progress.txt タスク1-5(Firestoreセキュリティルール)で本実装する。
-// このファイルはタスク1-5で置き換えられる想定。
+// 管理者判定方式: カスタムクレーム(request.auth.token.admin == true)
+//   採用理由は本タスクの実装報告を参照。ルールファイル内には管理者メールアドレスを
+//   一切ハードコードしない(メールアドレスはPII寄りの情報でありコミット履歴に残したくない、
+//   かつメールアドレスを変更する際にルールの再デプロイが不要になるため)。
+//   Phase 2(管理画面実装)で、管理者としてログインするFirebaseAuthユーザーに対し
+//   Admin SDK(または同等の仕組み)で admin: true のカスタムクレームを付与する必要がある。
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    // request.auth.token.admin が true のユーザーのみ管理者とみなす。
+    // 未認証(request.auth == null)の場合は request.auth.token 自体が存在しないため、
+    // まず request.auth != null を確認してから token.admin を評価する。
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // status: "published" のドキュメントのみ誰でも read 可能。
+    // resource.data.status を参照するため、既存ドキュメントに対する read(get/list)にのみ使う。
+    function isPublished() {
+      return resource.data.status == 'published';
+    }
+
+    // videos / shops / visits: published のみ誰でも read 可。draft は管理者のみ read 可。
+    // write(create/update/delete)は管理者のみ。
+    match /videos/{videoId} {
+      allow read: if isPublished() || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /shops/{shopId} {
+      allow read: if isPublished() || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /visits/{visitId} {
+      allow read: if isPublished() || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // performers / tags: ステータスの概念を持たないマスタデータ。誰でも read 可、write は管理者のみ。
+    match /performers/{performerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /tags/{tagId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

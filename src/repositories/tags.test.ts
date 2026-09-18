@@ -13,6 +13,7 @@ import type { TagData } from "@/types/tag";
 import {
   enableFirestoreEmulatorEnv,
   isFirestoreEmulatorAvailable,
+  signInAsEmulatorAdmin,
   uniqueTestId,
 } from "./test-support";
 
@@ -25,6 +26,8 @@ describe.skipIf(!emulatorAvailable)("tagsリポジトリ(Firestore Emulator必�
   let createdId: string | undefined;
 
   beforeAll(async () => {
+    const { auth } = await import("@/lib/firebase");
+    await signInAsEmulatorAdmin(auth);
     repo = await import("@/repositories/tags");
   });
 

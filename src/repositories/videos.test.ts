@@ -14,6 +14,7 @@ import type { CreateVideoInput } from "@/repositories/videos";
 import {
   enableFirestoreEmulatorEnv,
   isFirestoreEmulatorAvailable,
+  signInAsEmulatorAdmin,
   uniqueTestId,
 } from "./test-support";
 
@@ -27,6 +28,8 @@ describe.skipIf(!emulatorAvailable)("videosリポジトリ(Firestore Emulator必
   const draftVideoId = uniqueTestId("video-test-draft");
 
   beforeAll(async () => {
+    const { auth } = await import("@/lib/firebase");
+    await signInAsEmulatorAdmin(auth);
     repo = await import("@/repositories/videos");
   });
 

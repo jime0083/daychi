@@ -14,6 +14,7 @@ import type { CreateShopInput } from "@/repositories/shops";
 import {
   enableFirestoreEmulatorEnv,
   isFirestoreEmulatorAvailable,
+  signInAsEmulatorAdmin,
   uniqueTestId,
 } from "./test-support";
 
@@ -45,6 +46,8 @@ describe.skipIf(!emulatorAvailable)("shopsリポジトリ(Firestore Emulator必�
   let draftId: string | undefined;
 
   beforeAll(async () => {
+    const { auth } = await import("@/lib/firebase");
+    await signInAsEmulatorAdmin(auth);
     repo = await import("@/repositories/shops");
   });
 

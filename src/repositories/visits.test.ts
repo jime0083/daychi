@@ -17,6 +17,7 @@ import type { CreateVisitInput } from "@/repositories/visits";
 import {
   enableFirestoreEmulatorEnv,
   isFirestoreEmulatorAvailable,
+  signInAsEmulatorAdmin,
   uniqueTestId,
 } from "./test-support";
 
@@ -41,6 +42,8 @@ describe.skipIf(!emulatorAvailable)("visitsリポジトリ(Firestore Emulator必
   let draftId: string | undefined;
 
   beforeAll(async () => {
+    const { auth } = await import("@/lib/firebase");
+    await signInAsEmulatorAdmin(auth);
     repo = await import("@/repositories/visits");
   });
 
