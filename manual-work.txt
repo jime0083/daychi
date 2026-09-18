@@ -82,6 +82,18 @@ Work 7: Claude APIキーの取得
 最終ライン: Phase 4-5(実API通し確認)開始前
 
 =====================================
+Work 9: Java実行環境のPATH設定(P-001対応)
+=====================================
+[x] 状態: 完了(2026-09-19 ユーザー承認のうえClaudeがbrew linkを代行実行、java -version確認済み)
+内容:
+  Firestore EmulatorがJava(JRE)に依存するが、javaコマンドがPATH上に無い(problem.txt P-001)。
+  Homebrewのopenjdk 26はインストール済みのため、以下のいずれかでPATHに露出させる:
+  - 案A: brew link --force --overwrite openjdk を実行(Claudeが代行可能)
+  - 案B: ~/.zshrc に export PATH="/opt/homebrew/opt/openjdk/bin:$PATH" を追記
+  完了後、java -version が通ることを確認する
+最終ライン: Phase 1 タスク1-3(Emulator設定)の再開前
+
+=====================================
 Work 8: コーヒータイプのタグ決定と付与
 =====================================
 [ ] 状態: 未着手

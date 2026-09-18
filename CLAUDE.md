@@ -79,12 +79,16 @@ manual-work.txt(手動作業)に追加
 - MapLibre GL JS + OpenFreeMap
 - Playwright + Firebase Emulator Suite(E2Eはemulatorで実行、本番データを汚さない)
 
-## コマンド(Phase 1完了後に確定)
+## コマンド
 
 | コマンド | 用途 |
 |----------|------|
 | npm run dev | 開発サーバー起動 |
-| npm run emulator | Firebase Emulator起動 |
-| npm run seed | Emulatorへテストデータ投入 |
-| npm run e2e | E2Eテスト実行(emulator+dev server込み) |
-| npx tsc --noEmit | 型チェック(タスク完了前に必須) |
+| npm run emulator | Firebase Emulator起動(firestore:8080 / auth:9099 / UI:4000) |
+| npm run seed | Emulatorへテストデータ投入(冪等) |
+| npm run test | ユニットテスト(Vitest) |
+| npm run e2e | E2Eテスト実行(emulator+dev server込み。タスク1-6で導入) |
+| npm run typecheck | 型チェック(タスク完了前に必須。素のtscはP-002により禁止) |
+
+- 型チェックは必ず `npm run typecheck` を使う。素の `npx tsc --noEmit` はNext.js 16の
+  自動生成型(LayoutProps等)が無いクリーン状態で失敗する(problem.txt P-002参照)

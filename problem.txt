@@ -31,4 +31,78 @@
 =====================================
 問題一覧
 =====================================
-(まだ問題は記録されていない)
+
+## P-001: Firestore Emulatorに必要なJava実行環境がPATHに存在しない
+- 記録日: 2026-09-19
+- 状態: 解決済み
+- 発生箇所: タスク1-3(Firebase Emulator Suite設定)
+- 問題内容:
+  想定した動き: java -version が通り、Firestore Emulator(JRE依存)が起動できる
+  実際の動き: 「Unable to locate a Java Runtime.」でjavaコマンドが失敗し、Emulatorが起動できない
+- 再現手順:
+  1. ターミナルで java -version を実行 → エラー
+- 原因調査:
+  - /usr/libexec/java_home も失敗し、システム標準のJavaランタイムは未インストール
+  - Homebrewでは /opt/homebrew/opt/openjdk (openjdk 26.0.1) がインストール済みで、
+    直接パス指定での動作確認は成功(/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home/bin/java)
+  - ただし brew link されておらず /opt/homebrew/bin に露出していないためPATHから解決できない
+- 特定した原因:
+  Homebrew版openjdkがインストール済みだが未リンク(keg-only)のため、javaコマンドがPATH上に存在しない
+- 切り出したタスク: manual-work.txt Work 9(Java実行環境のPATH設定)
+- 解決日: 2026-09-19
+- 解決内容:
+  ユーザー承認のうえ brew link --force --overwrite openjdk を実行(37 symlinks created)。
+  java -version で openjdk 26.0.1 が返ることを確認。状態を「解決済み」とする
+
+## P-002: クリーンな状態で npx tsc --noEmit が LayoutProps 未定義エラーで失敗する
+- 記録日: 2026-09-19
+- 状態: 解決済み
+- 発生箇所: src/app/layout.tsx:20(タスク1-3実装中に発覚。1-3の変更とは無関係)
+- 問題内容:
+  想定した動き: 完了前必須チェックの npx tsc --noEmit がいつでもパスする
+  実際の動き: .next ディレクトリが無い状態では
+  「src/app/layout.tsx(20,50): error TS2304: Cannot find name 'LayoutProps'.」で失敗する
+- 再現手順:
+  1. .next ディレクトリを削除(またはクリーンな状態でclone)
+  2. npx tsc --noEmit を実行 → TS2304エラー
+- 原因調査:
+  - layout.tsx:20 は create-next-app(Next.js 16)標準テンプレートのまま LayoutProps<"/"> を使用
+  - LayoutProps は Next.js 16 が next dev / next build / next typegen 実行時に
+    .next/types へ自動生成するグローバル型(tsconfigのincludeで取り込まれる)
+  - 現在 .next が存在しないことを確認し、エラーを再現
+  - タスク1-1/1-2の検証時は devサーバー起動後(.next生成済み)だったため偶然パスしていた
+- 特定した原因:
+  自動生成型 LayoutProps に依存するコードに対し、型生成(next typegen)を伴わない
+  素の tsc --noEmit を実行していたため。チェックコマンド側の手順不足が根本原因
+- 切り出したタスク: progress.txt タスク1-7(型チェックコマンドの安定化)
+- 解決日: 2026-09-19
+- 解決内容:
+  npm script "typecheck"(next typegen && tsc --noEmit)を追加(コミット c863078)。
+  .next 削除済みのクリーン状態から npm run typecheck が2回連続でパスすることを
+  実装・レビュー双方で確認。以後の型チェックは npm run typecheck に統一
+  (CLAUDE.mdのコマンド表も更新済み)
+
+## P-003: セキュリティルール適用後にseedスクリプトがPERMISSION_DENIEDで失敗
+- 記録日: 2026-09-19
+- 状態: 解決済み
+- 発生箇所: scripts/seed.ts(タスク1-6のnpm run e2e初回実行時に顕在化)
+- 問題内容:
+  想定した動き: npm run e2e のglobalSetupでseedデータがEmulatorに投入される
+  実際の動き: seed投入が PERMISSION_DENIED で失敗する
+- 再現手順:
+  1. タスク1-5適用後(firestore.rules本実装後)の状態で emulator起動
+  2. npm run seed を実行 → PERMISSION_DENIED
+- 原因調査:
+  - タスク1-5の firestore.rules は write を管理者(admin==trueクレーム)のみに制限
+  - タスク1-3作成の scripts/seed.ts は未認証のclient SDKで書き込む実装だった
+  - 1-5のレビューではリポジトリテスト(管理者サインイン済み)のみ通しで確認され、
+    seedスクリプト単体はルール適用後に未検証だったため、1-6の全自動フローで初めて顕在化
+- 特定した原因:
+  firestore.rules(1-5)と seed.ts(1-3)の設計不整合。seed.tsが無認証書き込みのままだった
+- 切り出したタスク: タスク1-6の範囲内で修正(E2E基盤の完了条件に必須のため)
+- 解決日: 2026-09-19
+- 解決内容:
+  scripts/seed.ts を @firebase/rules-unit-testing の withSecurityRulesDisabled()方式
+  (ルールテストで確立済みのパターン)に変更。あわせてFirestore接続残留でnodeが
+  終了しない問題に process.exit() を明示。npm run e2e 3回連続グリーンで解決確認。
+  検証はタスク1-6のレビュー(daychi-review)に含めて実施

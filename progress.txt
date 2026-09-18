@@ -6,42 +6,49 @@
 # - 仕様の根拠は requirements.md を参照
 
 =====================================
-Phase 1: 開発基盤
+Phase 1: 開発基盤 【完了 2026-09-19】
 =====================================
 
-[ ] 1-1 Next.jsプロジェクト初期化
+[x] 1-1 Next.jsプロジェクト初期化 (2026-09-19 レビューPASS)
     内容: create-next-app(TypeScript, App Router, src dir)。ESLint/Prettier設定、
           git init、ディレクトリ構成(src/components, src/lib, src/types, src/repositories)作成
     完了条件: npm run dev でトップページが表示される。npx tsc --noEmit がパスする
 
-[ ] 1-2 Firebase SDK導入と初期化モジュール
+[x] 1-2 Firebase SDK導入と初期化モジュール (2026-09-19 レビューPASS)
     内容: firebaseパッケージ導入。src/lib/firebase.ts で初期化。
           .env.local.example 作成(Firebase構成値のキー一覧)。
           環境変数 NEXT_PUBLIC_USE_EMULATOR=true でEmulatorに接続を切り替えられるようにする
     完了条件: tsc パス。emulator接続切替のロジックにユニットテストがある
 
-[ ] 1-3 Firebase Emulator Suite設定
+[x] 1-3 Firebase Emulator Suite設定 (2026-09-19 レビューPASS)
     内容: firebase.json 作成(firestore + auth emulator)。demo-projectで起動できる設定。
           npm scripts追加(emulator起動)。E2E用シードデータ投入スクリプト
           (scripts/seed.ts: 出演者2名・動画2件・店舗2件・訪問2件のテストデータ)
     完了条件: emulator起動 → seedスクリプト実行 → Emulator UIでデータが確認できる
 
-[ ] 1-4 型定義とデータアクセス層
+[x] 1-4 型定義とデータアクセス層 (2026-09-19 レビューPASS)
     内容: requirements.md「4. データモデル」の全コレクションの型定義(src/types)と
           Firestoreコンバータ、リポジトリ関数(一覧取得・取得・作成・更新・削除、
           publishedのみ取得する関数)を実装
     完了条件: tsc パス。emulatorに対するリポジトリ関数のユニットテストが全て通る
 
-[ ] 1-5 Firestoreセキュリティルール
+[x] 1-5 Firestoreセキュリティルール (2026-09-19 レビューPASS)
     内容: firestore.rules 作成。read: publishedのみ(performers/tagsは全read可)、
           write: 管理者メール(カスタムクレーム or メール判定)のみ
     完了条件: @firebase/rules-unit-testing によるルールテストが全て通る
               (一般ユーザーがdraftをreadできない/writeできないことを含む)
 
-[ ] 1-6 Playwright E2E基盤
+[x] 1-6 Playwright E2E基盤 (2026-09-19 レビューPASS、P-003修正の検証含む)
     内容: Playwright導入。emulator起動+seed投入+next dev起動をまとめて行う
           E2E実行環境(npm run e2e)。サンプルE2Eテスト1本(トップページが開く)
     完了条件: npm run e2e がグリーンになる
+
+[x] 1-7 型チェックコマンドの安定化(P-002対応) (2026-09-19 レビューPASS)
+    内容: Next.js 16の自動生成型(LayoutProps等)に依存するため、素の tsc --noEmit が
+          .next 無しの状態で失敗する問題への対応。npm script "typecheck" を追加し
+          「next typegen && tsc --noEmit」とする。以後の型チェックはこのコマンドに統一
+          (CLAUDE.mdのコマンド表更新はメインエージェントが実施)
+    完了条件: .next を削除した状態から npm run typecheck がパスする
 
 =====================================
 Phase 2: 管理画面
