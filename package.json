@@ -10,6 +10,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "typecheck": "next typegen && tsc --noEmit",
     "emulator": "firebase emulators:start --only firestore,auth",
     "seed": "tsx scripts/seed.ts"
   },
