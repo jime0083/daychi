@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+build
+coverage
+package-lock.json
+e2e/artifacts
+
+# プロジェクト管理ファイル(内容変更禁止・フォーマット対象外)
+CLAUDE.md
+requirements.md
+progress.txt
+manual-work.txt
+problem.txt
