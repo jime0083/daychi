@@ -1,69 +1,83 @@
-import Image from "next/image";
+"use client";
+
+/**
+ * 公開トップページ(/、タスク3-1: 地図表示とピン)。
+ *
+ * requirements.md「3.1 公開ページ」に基づき、地図(MapLibre GL + OpenFreeMap)を
+ * 全画面表示し、published店舗のみをピン表示する。draft店舗はセキュリティルール
+ * (firestore.rules。read: status == "published" のみ誰でも可)によりそもそも
+ * 未認証クライアントから取得できないため、listPublishedShops() を使うだけで
+ * draft店舗が混入する心配はない(参考: src/repositories/shops.ts)。
+ *
+ * このページは認証不要でアクセスできる(AdminGate配下に置かない)。
+ * Firestoreの読み取りはブラウザのFirebase Client SDK(src/lib/firebase.ts)経由で
+ * 行うため、/admin配下の各画面と同様「use client」+ useEffect でのデータ取得とする。
+ *
+ * 地図コンポーネント(src/components/map/PublicMap.tsx)はMapLibreがSSR非対応のため
+ * next/dynamic(..., { ssr: false }) でクライアントサイドのみマウントする
+ * (src/app/admin/shops/page.tsx の ShopLocationPicker と同じ方針)。
+ */
+import dynamic from "next/dynamic";
+import { useEffect, useRef, useState } from "react";
+
+import { listPublishedShops } from "@/repositories/shops";
+import type { Shop } from "@/types/shop";
+
+const PublicMap = dynamic(() => import("@/components/map/PublicMap").then((mod) => mod.PublicMap), {
+  ssr: false,
+  loading: () => (
+    <div
+      data-testid="public-map-loading"
+      className="flex h-full w-full items-center justify-center text-sm text-zinc-500 dark:text-zinc-400"
+    >
+      地図を読み込み中...
+    </div>
+  ),
+});
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export default function Home() {
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // アンマウント後の setState を防ぐガード(/admin配下の各画面と同じパターン)
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    listPublishedShops()
+      .then((list) => {
+        if (mountedRef.current) {
+          setShops(list);
+          setLoadError(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (mountedRef.current) {
+          setLoadError(`店舗情報の取得に失敗しました: ${errorMessage(error)}`);
+        }
+      });
+  }, []);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main data-testid="public-map-page" className="relative h-dvh w-full overflow-hidden">
+      <PublicMap shops={shops} />
+      {loadError !== null && (
+        <p
+          data-testid="public-map-error"
+          className="absolute left-4 top-4 z-10 rounded bg-red-50 px-3 py-2 text-sm text-red-700 shadow dark:bg-red-950 dark:text-red-300"
+        >
+          {loadError}
+        </p>
+      )}
+    </main>
   );
 }

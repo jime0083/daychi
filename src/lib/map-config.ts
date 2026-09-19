@@ -20,3 +20,9 @@ export const DEFAULT_MAP_CENTER: GeoLocation = { lat: 35.681236, lng: 139.767125
 
 /** 店舗ピン指定用地図の初期ズームレベル */
 export const DEFAULT_MAP_ZOOM = 14;
+
+/**
+ * 公開ページ地図(タスク3-1〜)で複数/単一のピンをfitBoundsする際の周囲余白(px)。
+ * ピンが地図の端に接してしまい見切れることを防ぐための値であり、特定の店舗データには依存しない。
+ */
+export const MAP_FIT_BOUNDS_PADDING = 48;
