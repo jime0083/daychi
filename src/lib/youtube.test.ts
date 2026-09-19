@@ -4,7 +4,11 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { buildYoutubeThumbnailUrl, extractYouTubeVideoId } from "@/lib/youtube";
+import {
+  buildYoutubeThumbnailUrl,
+  buildYoutubeWatchUrl,
+  extractYouTubeVideoId,
+} from "@/lib/youtube";
 
 describe("extractYouTubeVideoId", () => {
   it("watch?v= 形式から動画IDを抽出できる", () => {
@@ -82,6 +86,14 @@ describe("buildYoutubeThumbnailUrl", () => {
   it("i.ytimg.com のhqdefault.jpg URLを組み立てる", () => {
     expect(buildYoutubeThumbnailUrl("dQw4w9WgXcQ")).toBe(
       "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+    );
+  });
+});
+
+describe("buildYoutubeWatchUrl", () => {
+  it("youtube.com/watch?v= のURLを組み立てる", () => {
+    expect(buildYoutubeWatchUrl("dQw4w9WgXcQ")).toBe(
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     );
   });
 });

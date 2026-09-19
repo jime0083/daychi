@@ -23,6 +23,14 @@
  * - 初期表示は渡された全ピンが収まる範囲にfitBoundsする。店舗が0件の場合は
  *   デフォルト中心(DEFAULT_MAP_CENTER)・デフォルトズーム(DEFAULT_MAP_ZOOM)に
  *   フォールバックする。
+ *
+ * タスク3-2(スライドアップ詳細シート)での追加:
+ * - onShopClick: ピンクリック時に呼ばれるコールバック(呼び出し側で詳細シートを開く)。
+ *   Marker要素はMapLibreにより地図キャンバスの兄弟要素としてcanvas-container配下に
+ *   追加される(canvas自体の子ではない)ため、ピンクリックが地図本体のclickイベントとして
+ *   二重発火することは基本的にないが、念のためstopPropagationしてから呼び出す。
+ * - onShopClick/onBackgroundClickの参照はrefで保持し、shops配列が変わらない限り
+ *   effectを再実行しない(呼び出し側がインラインの無名関数を渡しても安全なようにする)。
  */
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -42,12 +50,28 @@ export const MAP_PIN_TEST_ID = "map-pin";
 interface PublicMapProps {
   /** 地図にピン表示する店舗一覧。取得中は空配列を渡すこと(0件フォールバック表示になる) */
   shops: Shop[];
+  /** ピンクリック時に呼ばれるコールバック(タスク3-2: 詳細シートを開く用途) */
+  onShopClick?: (shopId: string) => void;
+  /** ピン以外の地図背景クリック時に呼ばれるコールバック(タスク3-2: 詳細シートを閉じる用途) */
+  onBackgroundClick?: () => void;
 }
 
-export function PublicMap({ shops }: PublicMapProps) {
+export function PublicMap({ shops, onShopClick, onBackgroundClick }: PublicMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+
+  // 最新のコールバックをrefで保持する(下のeffectの依存配列に含めないことで、
+  // 呼び出し側がインラインの無名関数を渡しても地図/ピンの再生成が起きないようにする)
+  const onShopClickRef = useRef(onShopClick);
+  useEffect(() => {
+    onShopClickRef.current = onShopClick;
+  }, [onShopClick]);
+
+  const onBackgroundClickRef = useRef(onBackgroundClick);
+  useEffect(() => {
+    onBackgroundClickRef.current = onBackgroundClick;
+  }, [onBackgroundClick]);
 
   // 地図本体の初期化(マウント時に一度だけ)。中心・ズームの初期値はダミーで、
   // 実際の表示範囲は下のeffect(shopsを購読)でfitBounds/setCenterにより確定する
@@ -63,6 +87,9 @@ export function PublicMap({ shops }: PublicMapProps) {
       zoom: DEFAULT_MAP_ZOOM,
     });
     mapRef.current = map;
+    map.on("click", () => {
+      onBackgroundClickRef.current?.();
+    });
 
     return () => {
       markersRef.current.forEach((marker) => marker.remove());
@@ -90,6 +117,13 @@ export function PublicMap({ shops }: PublicMapProps) {
       element.dataset.testid = MAP_PIN_TEST_ID;
       element.dataset.shopId = shop.id;
       element.setAttribute("aria-label", shop.name);
+      element.style.cursor = "pointer";
+      // ピンクリックで詳細シートを開く(タスク3-2)。地図本体のclickイベント
+      // (背景クリックで閉じる用途)への伝播を止めてから呼び出す
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onShopClickRef.current?.(shop.id);
+      });
       return marker;
     });
 

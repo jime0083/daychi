@@ -69,3 +69,11 @@ export function extractYouTubeVideoId(rawUrl: string): string | null {
 export function buildYoutubeThumbnailUrl(videoId: string): string {
   return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 }
+
+/**
+ * YouTube動画IDから視聴ページ(youtube.com/watch)のURLを組み立てる
+ * (タスク3-2: 詳細シートのサムネイルクリック時に新規タブで開くリンク先)。
+ */
+export function buildYoutubeWatchUrl(videoId: string): string {
+  return `https://www.youtube.com/watch?v=${videoId}`;
+}
