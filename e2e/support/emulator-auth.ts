@@ -97,3 +97,34 @@ export async function createEmulatorTestUser(options: CreateEmulatorTestUserOpti
     );
   }
 }
+
+/**
+ * Auth Emulatorに作成済みのテストユーザーでサインインし、その時点のカスタムクレームを
+ * 反映した新しいID Tokenを取得する(タスク2-7: /api/admin/oembed への認可のE2Eテスト用)。
+ *
+ * createEmulatorTestUser() が返す accounts:signUp のID Tokenは、admin: true の
+ * カスタムクレームを付与する(accounts:update)より前に発行されたものであり、
+ * クレームを反映していない。カスタムクレームはID Tokenの発行時点の値が
+ * 埋め込まれるため、クレーム付与後に改めてサインインし直すことで、
+ * admin クレームを含む最新のID Tokenを得る(src/repositories/test-support.ts の
+ * signInAsEmulatorAdmin が `getIdToken(true)` で強制リフレッシュしているのと同じ理由)。
+ */
+export async function signInEmulatorTestUser(email: string, password: string): Promise<string> {
+  const response = await fetch(
+    `http://${AUTH_EMULATOR_HOST}:${AUTH_EMULATOR_PORT}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=e2e-test-dummy-api-key`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Auth Emulatorへのテストユーザーサインインに失敗しました(status: ${response.status})`,
+    );
+  }
+
+  const { idToken } = (await response.json()) as { idToken: string };
+  return idToken;
+}

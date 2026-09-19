@@ -86,8 +86,10 @@ test.describe("訪問登録CRUD(/admin/visits)", () => {
     await expect(row).toContainText(itemMain2);
     await expect(row).toContainText("出演者A");
     await expect(row).toContainText(itemSub1);
+    // タスク2-7: 作成成功時に一時的な成功メッセージが表示される
+    await expect(page.getByTestId("visit-success")).toContainText("訪問を作成しました");
 
-    // 編集: 1人目の1件目の品目を書き換えて保存する
+    // 編集: 1人目の1件目の品目を書き換えて保存する(タスク2-7: 成功メッセージも表示される)
     await row.getByRole("button", { name: "編集" }).click();
     const editRow0 = page.getByTestId("visit-edit-consumption-row").nth(0);
     await editRow0.getByTestId("visit-edit-consumption-item").nth(0).fill(updatedItemMain1);
@@ -95,12 +97,73 @@ test.describe("訪問登録CRUD(/admin/visits)", () => {
 
     const updatedRow = page.getByTestId("visit-row").filter({ hasText: testId });
     await expect(updatedRow).toBeVisible();
+    await expect(page.getByTestId("visit-success")).toContainText("訪問を更新しました");
     await expect(updatedRow).toContainText(updatedItemMain1);
     await expect(updatedRow).toContainText(itemMain2);
     await expect(updatedRow).toContainText(itemSub1);
 
-    // 削除: 一覧から削除される
+    // 削除: 確認ダイアログ(タスク2-7)で確認すると一覧から削除される
     await updatedRow.getByRole("button", { name: "削除" }).click();
+    await expect(page.getByTestId("visit-delete-confirm")).toBeVisible();
+    await page.getByTestId("visit-delete-confirm-confirm").click();
+    await expect(page.getByTestId("visit-row").filter({ hasText: testId })).toHaveCount(0);
+  });
+
+  test("必須項目未入力で作成しようとするとエラーメッセージが表示され作成されない(タスク2-7)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+
+    await page.getByRole("link", { name: "訪問" }).click();
+    await expect(page.getByRole("heading", { name: "訪問登録" })).toBeVisible();
+
+    // 店舗・動画・出演者ごとの飲食メニューを一切入力せずに作成する
+    await page.getByRole("button", { name: "作成" }).click();
+
+    const errorList = page.getByTestId("visit-create-error");
+    await expect(errorList).toContainText("店舗を選択してください");
+    await expect(errorList).toContainText("動画を選択してください");
+    await expect(errorList).toContainText("出演者ごとの飲食メニューを1件以上入力してください");
+  });
+
+  test("削除確認ダイアログでキャンセルすると削除されない(タスク2-7)", async ({ page }) => {
+    await loginAsAdmin(page);
+
+    const testId = uniqueTestId("e2e-visit-cancel");
+    const item = `【E2Eテスト】${testId}-ブレンドコーヒー`;
+
+    await page.getByRole("link", { name: "訪問" }).click();
+    await expect(page.getByRole("heading", { name: "訪問登録" })).toBeVisible();
+
+    const shopSelect = page.getByTestId("visit-create-shop");
+    const videoSelect = page.getByTestId("visit-create-video");
+    await expect(shopSelect).toContainText("喫茶テスト 公開店");
+    await expect(videoSelect).toContainText("公開済み動画");
+    await shopSelect.selectOption({ label: "【テスト用】喫茶テスト 公開店" });
+    await videoSelect.selectOption({ label: "【テスト用】公開済み動画" });
+
+    await page.getByTestId("visit-create-consumption-addrow").click();
+    const createRow = page.getByTestId("visit-create-consumption-row").nth(0);
+    await createRow
+      .getByTestId("visit-create-consumption-performer")
+      .selectOption({ label: "【テスト用】メイン出演者" });
+    await createRow.getByTestId("visit-create-consumption-item").nth(0).fill(item);
+
+    await page.getByRole("button", { name: "作成" }).click();
+
+    const row = page.getByTestId("visit-row").filter({ hasText: testId });
+    await expect(row).toBeVisible();
+
+    await row.getByRole("button", { name: "削除" }).click();
+    await expect(page.getByTestId("visit-delete-confirm")).toBeVisible();
+    await page.getByTestId("visit-delete-confirm-cancel").click();
+
+    await expect(page.getByTestId("visit-delete-confirm")).toHaveCount(0);
+    await expect(row).toBeVisible();
+
+    // 後片付け
+    await row.getByRole("button", { name: "削除" }).click();
+    await page.getByTestId("visit-delete-confirm-confirm").click();
     await expect(page.getByTestId("visit-row").filter({ hasText: testId })).toHaveCount(0);
   });
 });

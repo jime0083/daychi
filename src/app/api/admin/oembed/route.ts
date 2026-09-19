@@ -14,15 +14,20 @@
  *   Playwrightのpage.routeでインターセプトしてモックする(youtube.com側への
  *   実ネットワークアクセスに依存しない決定的なテストにするため)
  *
- * 認可について: このエンドポイントは公開されているYouTube動画のメタデータ(タイトル)を
- * 取得するだけの読み取り専用プロキシであり、Firestoreへの書き込みは一切行わない。
- * 呼び出し元は /admin 配下(AdminGateでadminクレーム保持者のみ描画)からのみだが、
- * Route Handler自体はNext.jsの仕組み上ミドルウェアなしでは未ログインでも到達可能。
- * ID Token検証によるサーバー側認可は本タスクの範囲外(Admin SDK導入が必要)とし、
- * 未解決の懸念点として報告する。
+ * 認可について(タスク2-7対応): 2-3レビュー所見の通り、本エンドポイントは
+ * 未認証でも到達可能な踏み台濫用防止のため、呼び出し元(管理画面)に
+ * Firebase ID Tokenを `Authorization: Bearer <idToken>` ヘッダーで送らせ、
+ * サーバー側で src/lib/admin-token.ts (Identity Toolkit REST APIの
+ * accounts:lookupでcustomAttributes.adminを確認)を使って検証する。
+ * firebase-adminは導入しない(ADC解決がサンドボックスでハングする既知問題
+ * (problem.txt P-003関連)を避けるため)。この方式はFirebase Auth Emulatorでも
+ * 同じREST APIパスがエミュレートされるため、emulator環境で完結して検証できる
+ * (E2E: e2e/oembed-auth.spec.ts参照)。
+ * トークンが無い場合は401、トークンはあるが管理者クレームが無い/無効な場合は403を返す。
  */
 import { NextResponse } from "next/server";
 
+import { extractBearerToken, verifyAdminIdToken } from "@/lib/admin-token";
 import { extractYouTubeVideoId } from "@/lib/youtube";
 
 interface OEmbedSuccessResponse {
@@ -38,7 +43,19 @@ interface YoutubeOEmbedResponse {
   title?: string;
 }
 
-export async function GET(request: Request): Promise<NextResponse<OEmbedSuccessResponse | OEmbedErrorResponse>> {
+export async function GET(
+  request: Request,
+): Promise<NextResponse<OEmbedSuccessResponse | OEmbedErrorResponse>> {
+  const idToken = extractBearerToken(request.headers.get("authorization"));
+  if (idToken === null) {
+    return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
+  }
+
+  const isAdmin = await verifyAdminIdToken(idToken);
+  if (!isAdmin) {
+    return NextResponse.json({ error: "管理者権限が必要です" }, { status: 403 });
+  }
+
   const { searchParams } = new URL(request.url);
   const rawUrl = searchParams.get("url");
 

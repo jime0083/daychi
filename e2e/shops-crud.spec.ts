@@ -70,8 +70,10 @@ test.describe("店舗登録CRUD(/admin/shops)", () => {
     await expect(row).toContainText("2026/5/1");
     await expect(row).toContainText("下書き");
     await expect(row.getByTestId("shop-location")).toHaveText("35.658034, 139.701636");
+    // タスク2-7: 作成成功時に一時的な成功メッセージが表示される
+    await expect(page.getByTestId("shop-success")).toContainText("店舗を作成しました");
 
-    // 編集: 店名と座標を変更して保存する
+    // 編集: 店名と座標を変更して保存する(タスク2-7: 成功メッセージも表示される)
     await row.getByRole("button", { name: "編集" }).click();
     await page.getByTestId("shop-edit-name").fill(updatedName);
     await page.getByTestId("shop-edit-lat").fill("35.170000");
@@ -81,9 +83,67 @@ test.describe("店舗登録CRUD(/admin/shops)", () => {
     const updatedRow = page.getByTestId("shop-row").filter({ hasText: updatedName });
     await expect(updatedRow).toBeVisible();
     await expect(updatedRow.getByTestId("shop-location")).toHaveText("35.170000, 136.881600");
+    await expect(page.getByTestId("shop-success")).toContainText("店舗を更新しました");
 
-    // 削除: 一覧から削除される
+    // 削除: 確認ダイアログ(タスク2-7)で確認すると一覧から削除される
     await updatedRow.getByRole("button", { name: "削除" }).click();
+    await expect(page.getByTestId("shop-delete-confirm")).toBeVisible();
+    await page.getByTestId("shop-delete-confirm-confirm").click();
     await expect(page.getByTestId("shop-row").filter({ hasText: updatedName })).toHaveCount(0);
+  });
+
+  test("必須項目未入力で作成しようとするとエラーメッセージが表示され作成されない(タスク2-7)", async ({
+    page,
+  }) => {
+    await page.route("**/tiles.openfreemap.org/**", async (route) => {
+      await route.abort();
+    });
+
+    await loginAsAdmin(page);
+
+    await page.getByRole("link", { name: "店舗" }).click();
+    await expect(page.getByRole("heading", { name: "店舗マスタ" })).toBeVisible();
+
+    // 店名・住所・情報基準日を未入力のまま作成する(緯度経度はデフォルト値が入っている)
+    await page.getByRole("button", { name: "作成" }).click();
+
+    const errorList = page.getByTestId("shop-create-error");
+    await expect(errorList).toContainText("店名を入力してください");
+    await expect(errorList).toContainText("住所を入力してください");
+    await expect(errorList).toContainText("情報基準日を入力してください");
+  });
+
+  test("削除確認ダイアログでキャンセルすると削除されない(タスク2-7)", async ({ page }) => {
+    await page.route("**/tiles.openfreemap.org/**", async (route) => {
+      await route.abort();
+    });
+
+    await loginAsAdmin(page);
+
+    const shopId = uniqueTestId("e2e-shop-cancel");
+    const name = `【E2Eテスト】削除キャンセル店 ${shopId}`;
+
+    await page.getByRole("link", { name: "店舗" }).click();
+    await expect(page.getByRole("heading", { name: "店舗マスタ" })).toBeVisible();
+
+    await page.getByTestId("shop-create-name").fill(name);
+    await page.getByTestId("shop-create-address").fill("東京都渋谷区テスト2-2-2");
+    await page.getByTestId("shop-create-infoasof").fill("2026-05-01");
+    await page.getByRole("button", { name: "作成" }).click();
+
+    const row = page.getByTestId("shop-row").filter({ hasText: name });
+    await expect(row).toBeVisible();
+
+    await row.getByRole("button", { name: "削除" }).click();
+    await expect(page.getByTestId("shop-delete-confirm")).toBeVisible();
+    await page.getByTestId("shop-delete-confirm-cancel").click();
+
+    await expect(page.getByTestId("shop-delete-confirm")).toHaveCount(0);
+    await expect(row).toBeVisible();
+
+    // 後片付け
+    await row.getByRole("button", { name: "削除" }).click();
+    await page.getByTestId("shop-delete-confirm-confirm").click();
+    await expect(page.getByTestId("shop-row").filter({ hasText: name })).toHaveCount(0);
   });
 });

@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * 動画登録CRUD画面(/admin/videos、タスク2-3)。
+ * 動画登録CRUD画面(/admin/videos、タスク2-3。バリデーション/削除確認/
+ * 成功フィードバック/oEmbed呼び出しの認可ヘッダーはタスク2-7で強化)。
  *
  * requirements.md「3.2 管理画面」「4. データモデル」videos に準拠し、
  * YouTube URLを貼り付け→動画ID抽出(src/lib/youtube.ts)→oEmbed API
@@ -12,13 +13,24 @@
  * status(draft/published)は作成時に "draft" 固定とする。draft⇔published切替は
  * タスク2-6でPublishStatusToggle(共通コンポーネント)により一覧から行う。
  *
- * 入力バリデーションは最小限(必須項目のみ)とし、削除も確認ダイアログなしの
- * 即時実行とする(作り込みはタスク2-7の範囲。/admin/performers の実装パターンに倣う)。
+ * oEmbed呼び出しの認可(タスク2-7): /api/admin/oembed は管理者ID Tokenの検証を
+ * 必須にしたため(src/app/api/admin/oembed/route.ts参照)、呼び出し側であるこの
+ * ページも useAdminAuth() で取得したFirebase Userの getIdToken() を
+ * Authorization: Bearer ヘッダーに載せて送信する。
+ *
+ * バリデーション: 動画情報取得済み・タイトル・公開日をそれぞれ検証し、
+ * 不足項目をまとめてエラーメッセージ表示する。削除は確認ダイアログを挟む。
+ * 作成・更新・公開切替の成功時は一時的な成功メッセージを表示する。
  */
 import { Timestamp } from "firebase/firestore";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { PublishStatusToggle } from "@/components/admin/PublishStatusToggle";
+import { SuccessMessage } from "@/components/admin/SuccessMessage";
+import { useAdminAuth } from "@/lib/admin-auth";
+import { useTransientMessage } from "@/lib/use-transient-message";
+import type { ValidationResult } from "@/lib/validation";
 import { createVideo, deleteVideo, listVideos, updateVideo } from "@/repositories/videos";
 import type { PublishStatus } from "@/types/common";
 import type { Video } from "@/types/video";
@@ -36,6 +48,17 @@ interface VideoCreateFormState {
 interface VideoEditFormState {
   title: string;
   publishedAt: string;
+}
+
+interface ParsedVideoCreateForm {
+  videoId: string;
+  title: string;
+  publishedAt: Timestamp;
+}
+
+interface ParsedVideoEditForm {
+  title: string;
+  publishedAt: Timestamp;
 }
 
 const EMPTY_CREATE_FORM: VideoCreateFormState = {
@@ -73,18 +96,67 @@ function formatDateForDisplay(timestamp: Timestamp): string {
   return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+/** 作成フォームの検証: 動画情報取得済み・タイトル・公開日をすべて満たす必要がある */
+function validateVideoCreateForm(
+  form: VideoCreateFormState,
+): ValidationResult<ParsedVideoCreateForm> {
+  const errors: string[] = [];
+
+  if (form.videoId === null) {
+    errors.push("先に「動画情報を取得」を実行してください");
+  }
+  const title = form.title.trim();
+  if (title === "") {
+    errors.push("タイトルを入力してください");
+  }
+  const publishedAt = parseDateInputValue(form.publishedAt);
+  if (publishedAt === null) {
+    errors.push("公開日を入力してください");
+  }
+
+  if (errors.length > 0 || form.videoId === null || publishedAt === null) {
+    return { ok: false, errors };
+  }
+  return { ok: true, data: { videoId: form.videoId, title, publishedAt } };
+}
+
+/** 編集フォームの検証: タイトル・公開日が必須 */
+function validateVideoEditForm(form: VideoEditFormState): ValidationResult<ParsedVideoEditForm> {
+  const errors: string[] = [];
+
+  const title = form.title.trim();
+  if (title === "") {
+    errors.push("タイトルを入力してください");
+  }
+  const publishedAt = parseDateInputValue(form.publishedAt);
+  if (publishedAt === null) {
+    errors.push("公開日を入力してください");
+  }
+
+  if (errors.length > 0 || publishedAt === null) {
+    return { ok: false, errors };
+  }
+  return { ok: true, data: { title, publishedAt } };
+}
+
 export default function AdminVideosPage() {
+  const authStatus = useAdminAuth();
+
   const [videos, setVideos] = useState<Video[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
 
   const [createForm, setCreateForm] = useState<VideoCreateFormState>(EMPTY_CREATE_FORM);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createErrors, setCreateErrors] = useState<string[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<VideoEditFormState>({ title: "", publishedAt: "" });
-  const [editError, setEditError] = useState<string | null>(null);
+  const [editErrors, setEditErrors] = useState<string[]>([]);
+
+  const [deleteTarget, setDeleteTarget] = useState<Video | null>(null);
+
+  const { message: successMessage, show: showSuccess } = useTransientMessage();
 
   // アンマウント後の setState を防ぐガード(/admin/performers と同じパターン)
   const mountedRef = useRef(true);
@@ -130,10 +202,17 @@ export default function AdminVideosPage() {
       setFetchError("有効なYouTube URLではありません");
       return;
     }
+    if (authStatus.state !== "signed-in") {
+      setFetchError("認証状態を確認できませんでした。画面を再読み込みしてください");
+      return;
+    }
     setFetchError(null);
     setFetching(true);
     try {
-      const response = await fetch(`/api/admin/oembed?url=${encodeURIComponent(createForm.url)}`);
+      const idToken = await authStatus.user.getIdToken();
+      const response = await fetch(`/api/admin/oembed?url=${encodeURIComponent(createForm.url)}`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
       const body = (await response.json()) as { videoId?: string; title?: string; error?: string };
       if (!response.ok || body.title === undefined || body.videoId === undefined) {
         throw new Error(body.error ?? `動画情報の取得に失敗しました(status: ${response.status})`);
@@ -150,60 +229,52 @@ export default function AdminVideosPage() {
 
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (createForm.videoId === null) {
-      setCreateError("先に「動画情報を取得」を実行してください");
+    const result = validateVideoCreateForm(createForm);
+    if (!result.ok) {
+      setCreateErrors(result.errors);
       return;
     }
-    const title = createForm.title.trim();
-    if (title === "") {
-      setCreateError("タイトルを入力してください");
-      return;
-    }
-    const publishedAt = parseDateInputValue(createForm.publishedAt);
-    if (publishedAt === null) {
-      setCreateError("公開日を入力してください");
-      return;
-    }
-    setCreateError(null);
+    setCreateErrors([]);
     try {
-      await createVideo(createForm.videoId, { title, publishedAt, status: "draft" });
+      await createVideo(result.data.videoId, {
+        title: result.data.title,
+        publishedAt: result.data.publishedAt,
+        status: "draft",
+      });
       setCreateForm(EMPTY_CREATE_FORM);
+      showSuccess("動画を作成しました");
       await reload();
     } catch (error) {
-      setCreateError(`作成に失敗しました: ${errorMessage(error)}`);
+      setCreateErrors([`作成に失敗しました: ${errorMessage(error)}`]);
     }
   }
 
   function startEdit(video: Video): void {
     setEditingId(video.id);
     setEditForm({ title: video.title, publishedAt: timestampToDateInputValue(video.publishedAt) });
-    setEditError(null);
+    setEditErrors([]);
   }
 
   function cancelEdit(): void {
     setEditingId(null);
-    setEditError(null);
+    setEditErrors([]);
   }
 
   async function handleEditSubmit(event: FormEvent<HTMLFormElement>, id: string): Promise<void> {
     event.preventDefault();
-    const title = editForm.title.trim();
-    if (title === "") {
-      setEditError("タイトルを入力してください");
-      return;
-    }
-    const publishedAt = parseDateInputValue(editForm.publishedAt);
-    if (publishedAt === null) {
-      setEditError("公開日を入力してください");
+    const result = validateVideoEditForm(editForm);
+    if (!result.ok) {
+      setEditErrors(result.errors);
       return;
     }
     try {
-      await updateVideo(id, { title, publishedAt });
+      await updateVideo(id, result.data);
       setEditingId(null);
-      setEditError(null);
+      setEditErrors([]);
+      showSuccess("動画を更新しました");
       await reload();
     } catch (error) {
-      setEditError(`更新に失敗しました: ${errorMessage(error)}`);
+      setEditErrors([`更新に失敗しました: ${errorMessage(error)}`]);
     }
   }
 
@@ -219,9 +290,19 @@ export default function AdminVideosPage() {
     }
   }
 
+  async function confirmDelete(): Promise<void> {
+    if (deleteTarget === null) {
+      return;
+    }
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    await handleDelete(target.id);
+  }
+
   async function handleToggleStatus(id: string, nextStatus: PublishStatus): Promise<void> {
     try {
       await updateVideo(id, { status: nextStatus });
+      showSuccess(nextStatus === "published" ? "動画を公開しました" : "動画を下書きに戻しました");
       await reload();
     } catch (error) {
       setListError(`ステータス変更に失敗しました: ${errorMessage(error)}`);
@@ -236,6 +317,8 @@ export default function AdminVideosPage() {
           YouTube URLを貼り付けて動画を登録します。公開日は手入力してください。
         </p>
       </div>
+
+      <SuccessMessage testId="video-success" message={successMessage} />
 
       <form
         data-testid="video-create-form"
@@ -320,10 +403,15 @@ export default function AdminVideosPage() {
             作成
           </button>
         </div>
-        {createError !== null && (
-          <p data-testid="video-create-error" className="text-sm text-red-600 dark:text-red-400">
-            {createError}
-          </p>
+        {createErrors.length > 0 && (
+          <ul
+            data-testid="video-create-error"
+            className="flex flex-col gap-0.5 text-sm text-red-600 dark:text-red-400"
+          >
+            {createErrors.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
         )}
       </form>
 
@@ -401,13 +489,15 @@ export default function AdminVideosPage() {
                           >
                             キャンセル
                           </button>
-                          {editError !== null && (
-                            <p
+                          {editErrors.length > 0 && (
+                            <ul
                               data-testid="video-edit-error"
-                              className="w-full text-red-600 dark:text-red-400"
+                              className="flex w-full flex-col gap-0.5 text-red-600 dark:text-red-400"
                             >
-                              {editError}
-                            </p>
+                              {editErrors.map((message) => (
+                                <li key={message}>{message}</li>
+                              ))}
+                            </ul>
                           )}
                         </form>
                       </td>
@@ -448,9 +538,7 @@ export default function AdminVideosPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                void handleDelete(video.id);
-                              }}
+                              onClick={() => setDeleteTarget(video)}
                               className="rounded border border-red-300 px-3 py-1 text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
                             >
                               削除
@@ -472,6 +560,18 @@ export default function AdminVideosPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {deleteTarget !== null && (
+        <ConfirmDialog
+          testId="video-delete-confirm"
+          title="動画を削除しますか?"
+          message={`「${deleteTarget.title}」を削除します。この操作は取り消せません。`}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            void confirmDelete();
+          }}
+        />
       )}
     </div>
   );

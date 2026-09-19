@@ -1,19 +1,24 @@
 "use client";
 
 /**
- * 出演者マスタCRUD画面(/admin/performers、タスク2-2)。
+ * 出演者マスタCRUD画面(/admin/performers、タスク2-2。バリデーション/削除確認/
+ * 成功フィードバックはタスク2-7で強化)。
  *
  * requirements.md「3.2 管理画面」「4. データモデル」performers に準拠し、
  * 名前(name)・メイン出演者フラグ(isMain)・表示順(order)のCRUDを行う。
  * このページは src/app/admin/layout.tsx 経由の AdminGate 配下でのみ描画されるため、
  * 表示された時点で管理者(adminクレーム保持者)であることが保証されている。
  *
- * 入力バリデーションは「名前必須」のみの最小限とする(本格的なバリデーション・
- * エラー表示の作り込みはタスク2-7の範囲)。削除も確認ダイアログなしの即時実行とする
- * (削除確認ダイアログの追加もタスク2-7の範囲)。
+ * バリデーション: 名前必須、表示順は入力する場合は数値必須。不足項目はエラー
+ * メッセージの配列として表示する(src/lib/validation.ts の ValidationResult)。
+ * 削除: 即時実行ではなく src/components/admin/ConfirmDialog.tsx による確認を挟む。
+ * 成功フィードバック: 作成・更新の成功時に一時的な成功メッセージ
+ * (src/lib/use-transient-message.ts)をページ上部に表示する。
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
+import { SuccessMessage } from "@/components/admin/SuccessMessage";
 import {
   createPerformer,
   deletePerformer,
@@ -21,6 +26,8 @@ import {
   updatePerformer,
 } from "@/repositories/performers";
 import type { Performer, PerformerData } from "@/types/performer";
+import { useTransientMessage } from "@/lib/use-transient-message";
+import type { ValidationResult } from "@/lib/validation";
 
 /** フォームの入力値(number入力もいったん文字列で保持し、送信時にパースする) */
 interface PerformerFormState {
@@ -31,14 +38,33 @@ interface PerformerFormState {
 
 const EMPTY_FORM: PerformerFormState = { name: "", isMain: false, order: "0" };
 
-/** フォーム入力値を検証し、Firestoreへ書き込む形(PerformerData)に変換する。名前が空なら null */
-function parseFormState(form: PerformerFormState): PerformerData | null {
+/**
+ * フォーム入力値を検証し、Firestoreへ書き込む形(PerformerData)に変換する。
+ * 名前が空、または表示順が入力されているのに数値でない場合はエラーメッセージを返す。
+ */
+function validatePerformerForm(form: PerformerFormState): ValidationResult<PerformerData> {
+  const errors: string[] = [];
+
   const name = form.name.trim();
   if (name === "") {
-    return null;
+    errors.push("名前を入力してください");
   }
-  const order = Number(form.order);
-  return { name, isMain: form.isMain, order: Number.isFinite(order) ? order : 0 };
+
+  let order = 0;
+  const trimmedOrder = form.order.trim();
+  if (trimmedOrder !== "") {
+    const parsedOrder = Number(trimmedOrder);
+    if (!Number.isFinite(parsedOrder)) {
+      errors.push("表示順は数値で入力してください");
+    } else {
+      order = parsedOrder;
+    }
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+  return { ok: true, data: { name, isMain: form.isMain, order } };
 }
 
 function errorMessage(error: unknown): string {
@@ -50,11 +76,15 @@ export default function AdminPerformersPage() {
   const [listError, setListError] = useState<string | null>(null);
 
   const [createForm, setCreateForm] = useState<PerformerFormState>(EMPTY_FORM);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createErrors, setCreateErrors] = useState<string[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<PerformerFormState>(EMPTY_FORM);
-  const [editError, setEditError] = useState<string | null>(null);
+  const [editErrors, setEditErrors] = useState<string[]>([]);
+
+  const [deleteTarget, setDeleteTarget] = useState<Performer | null>(null);
+
+  const { message: successMessage, show: showSuccess } = useTransientMessage();
 
   // アンマウント後の setState を防ぐガード。マウント中かどうかをrefで保持する
   // (reactの検証ルール上、effect内での直接的なsetState呼び出しを避けるため、
@@ -102,46 +132,48 @@ export default function AdminPerformersPage() {
 
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const data = parseFormState(createForm);
-    if (!data) {
-      setCreateError("名前を入力してください");
+    const result = validatePerformerForm(createForm);
+    if (!result.ok) {
+      setCreateErrors(result.errors);
       return;
     }
-    setCreateError(null);
+    setCreateErrors([]);
     try {
-      await createPerformer(data);
+      await createPerformer(result.data);
       setCreateForm(EMPTY_FORM);
+      showSuccess("出演者を作成しました");
       await reload();
     } catch (error) {
-      setCreateError(`作成に失敗しました: ${errorMessage(error)}`);
+      setCreateErrors([`作成に失敗しました: ${errorMessage(error)}`]);
     }
   }
 
   function startEdit(performer: Performer): void {
     setEditingId(performer.id);
     setEditForm({ name: performer.name, isMain: performer.isMain, order: String(performer.order) });
-    setEditError(null);
+    setEditErrors([]);
   }
 
   function cancelEdit(): void {
     setEditingId(null);
-    setEditError(null);
+    setEditErrors([]);
   }
 
   async function handleEditSubmit(event: FormEvent<HTMLFormElement>, id: string): Promise<void> {
     event.preventDefault();
-    const data = parseFormState(editForm);
-    if (!data) {
-      setEditError("名前を入力してください");
+    const result = validatePerformerForm(editForm);
+    if (!result.ok) {
+      setEditErrors(result.errors);
       return;
     }
     try {
-      await updatePerformer(id, data);
+      await updatePerformer(id, result.data);
       setEditingId(null);
-      setEditError(null);
+      setEditErrors([]);
+      showSuccess("出演者を更新しました");
       await reload();
     } catch (error) {
-      setEditError(`更新に失敗しました: ${errorMessage(error)}`);
+      setEditErrors([`更新に失敗しました: ${errorMessage(error)}`]);
     }
   }
 
@@ -157,6 +189,15 @@ export default function AdminPerformersPage() {
     }
   }
 
+  async function confirmDelete(): Promise<void> {
+    if (deleteTarget === null) {
+      return;
+    }
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    await handleDelete(target.id);
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -165,6 +206,8 @@ export default function AdminPerformersPage() {
           名前・メイン出演者フラグ・表示順を管理します。
         </p>
       </div>
+
+      <SuccessMessage testId="performer-success" message={successMessage} />
 
       <form
         data-testid="performer-create-form"
@@ -208,13 +251,15 @@ export default function AdminPerformersPage() {
         >
           作成
         </button>
-        {createError !== null && (
-          <p
+        {createErrors.length > 0 && (
+          <ul
             data-testid="performer-create-error"
-            className="w-full text-sm text-red-600 dark:text-red-400"
+            className="flex w-full flex-col gap-0.5 text-sm text-red-600 dark:text-red-400"
           >
-            {createError}
-          </p>
+            {createErrors.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
         )}
       </form>
 
@@ -302,13 +347,15 @@ export default function AdminPerformersPage() {
                           >
                             キャンセル
                           </button>
-                          {editError !== null && (
-                            <p
+                          {editErrors.length > 0 && (
+                            <ul
                               data-testid="performer-edit-error"
-                              className="w-full text-red-600 dark:text-red-400"
+                              className="flex w-full flex-col gap-0.5 text-red-600 dark:text-red-400"
                             >
-                              {editError}
-                            </p>
+                              {editErrors.map((message) => (
+                                <li key={message}>{message}</li>
+                              ))}
+                            </ul>
                           )}
                         </form>
                       </td>
@@ -337,9 +384,7 @@ export default function AdminPerformersPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                void handleDelete(performer.id);
-                              }}
+                              onClick={() => setDeleteTarget(performer)}
                               className="rounded border border-red-300 px-3 py-1 text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
                             >
                               削除
@@ -361,6 +406,18 @@ export default function AdminPerformersPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {deleteTarget !== null && (
+        <ConfirmDialog
+          testId="performer-delete-confirm"
+          title="出演者を削除しますか?"
+          message={`「${deleteTarget.name}」を削除します。この操作は取り消せません。`}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            void confirmDelete();
+          }}
+        />
       )}
     </div>
   );

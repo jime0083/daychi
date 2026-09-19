@@ -72,18 +72,21 @@ test.describe("公開ステータス管理(draft⇔published切替)", () => {
     const toggle = row.getByTestId("video-status-toggle");
     await expect(toggle).toHaveText("公開する");
 
-    // draft → published
+    // draft → published(タスク2-7: 切替成功時に一時的な成功メッセージが表示される)
     await toggle.click();
     await expect(statusCell).toHaveText("公開");
     await expect(toggle).toHaveText("下書きに戻す");
+    await expect(page.getByTestId("video-success")).toContainText("動画を公開しました");
 
     // published → draft
     await toggle.click();
     await expect(statusCell).toHaveText("下書き");
     await expect(toggle).toHaveText("公開する");
+    await expect(page.getByTestId("video-success")).toContainText("動画を下書きに戻しました");
 
-    // 後片付け
+    // 後片付け(削除確認ダイアログ(タスク2-7)で確認する)
     await row.getByRole("button", { name: "削除" }).click();
+    await page.getByTestId("video-delete-confirm-confirm").click();
     await expect(page.getByTestId("video-row").filter({ hasText: title })).toHaveCount(0);
   });
 
@@ -117,17 +120,21 @@ test.describe("公開ステータス管理(draft⇔published切替)", () => {
     const toggle = row.getByTestId("shop-status-toggle");
     await expect(toggle).toHaveText("公開する");
 
-    // draft → published
+    // draft → published(タスク2-7: 切替成功時に一時的な成功メッセージが表示される)
     await toggle.click();
     await expect(statusCell).toHaveText("公開");
     await expect(toggle).toHaveText("下書きに戻す");
+    await expect(page.getByTestId("shop-success")).toContainText("店舗を公開しました");
 
     // published → draft
     await toggle.click();
     await expect(statusCell).toHaveText("下書き");
     await expect(toggle).toHaveText("公開する");
+    await expect(page.getByTestId("shop-success")).toContainText("店舗を下書きに戻しました");
 
+    // 後片付け(削除確認ダイアログ(タスク2-7)で確認する)
     await row.getByRole("button", { name: "削除" }).click();
+    await page.getByTestId("shop-delete-confirm-confirm").click();
     await expect(page.getByTestId("shop-row").filter({ hasText: name })).toHaveCount(0);
   });
 
@@ -165,17 +172,21 @@ test.describe("公開ステータス管理(draft⇔published切替)", () => {
     const toggle = row.getByTestId("visit-status-toggle");
     await expect(toggle).toHaveText("公開する");
 
-    // draft → published
+    // draft → published(タスク2-7: 切替成功時に一時的な成功メッセージが表示される)
     await toggle.click();
     await expect(statusCell).toHaveText("公開");
     await expect(toggle).toHaveText("下書きに戻す");
+    await expect(page.getByTestId("visit-success")).toContainText("訪問を公開しました");
 
     // published → draft
     await toggle.click();
     await expect(statusCell).toHaveText("下書き");
     await expect(toggle).toHaveText("公開する");
+    await expect(page.getByTestId("visit-success")).toContainText("訪問を下書きに戻しました");
 
+    // 後片付け(削除確認ダイアログ(タスク2-7)で確認する)
     await row.getByRole("button", { name: "削除" }).click();
+    await page.getByTestId("visit-delete-confirm-confirm").click();
     await expect(page.getByTestId("visit-row").filter({ hasText: testId })).toHaveCount(0);
   });
 });

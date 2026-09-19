@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * 店舗登録CRUD画面(/admin/shops、タスク2-4)。
+ * 店舗登録CRUD画面(/admin/shops、タスク2-4。バリデーション/削除確認/
+ * 成功フィードバックはタスク2-7で強化)。
  *
  * requirements.md「3.2 管理画面」「4. データモデル」shops に準拠し、
  * 店名・住所・営業時間・情報基準日(infoAsOf)・閉店フラグ・緯度経度(location)の
@@ -19,18 +20,23 @@
  *   堅牢な設計とする。E2Eでは数値入力欄側で座標を検証する
  *   (e2e/shops-crud.spec.ts参照)。
  *
- * 入力バリデーションは最小限(必須項目のみ)とし、削除も確認ダイアログなしの
- * 即時実行とする(作り込みはタスク2-7の範囲。/admin/videos の実装パターンに倣う)。
+ * バリデーション: 店名・住所・情報基準日・緯度経度(数値)をそれぞれ検証し、
+ * 不足項目をまとめてエラーメッセージ表示する。削除は確認ダイアログを挟む。
+ * 作成・更新・公開切替の成功時は一時的な成功メッセージを表示する。
  */
 import { Timestamp } from "firebase/firestore";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { PublishStatusToggle } from "@/components/admin/PublishStatusToggle";
+import { SuccessMessage } from "@/components/admin/SuccessMessage";
 import { createShop, deleteShop, listShops, updateShop } from "@/repositories/shops";
 import type { Shop } from "@/types/shop";
 import type { GeoLocation, PublishStatus } from "@/types/common";
 import { DEFAULT_MAP_CENTER } from "@/lib/map-config";
+import { useTransientMessage } from "@/lib/use-transient-message";
+import type { ValidationResult } from "@/lib/validation";
 
 // MapLibreはwindow/documentに依存するため、SSRでは描画せずクライアントでのみマウントする
 const ShopLocationPicker = dynamic(
@@ -109,30 +115,43 @@ function formatDateForDisplay(timestamp: Timestamp): string {
 
 /**
  * フォーム入力値を検証し、Firestoreへ書き込む形に変換する。
- * 店名・住所が空、情報基準日が未入力/不正、緯度経度が数値として不正な場合は null
+ * 店名・住所が空、情報基準日が未入力/不正、緯度経度が数値として不正な場合は
+ * それぞれ具体的なエラーメッセージを返す。
  */
-function parseFormState(form: ShopFormState): ParsedShopForm | null {
+function validateShopForm(form: ShopFormState): ValidationResult<ParsedShopForm> {
+  const errors: string[] = [];
+
   const name = form.name.trim();
+  if (name === "") {
+    errors.push("店名を入力してください");
+  }
   const address = form.address.trim();
-  if (name === "" || address === "") {
-    return null;
+  if (address === "") {
+    errors.push("住所を入力してください");
   }
   const infoAsOf = parseDateInputValue(form.infoAsOf);
   if (infoAsOf === null) {
-    return null;
+    errors.push("情報基準日を入力してください");
   }
   const lat = Number(form.lat);
   const lng = Number(form.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return null;
+    errors.push("緯度・経度を数値で入力してください(地図クリックでも設定できます)");
+  }
+
+  if (errors.length > 0 || infoAsOf === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { ok: false, errors };
   }
   return {
-    name,
-    address,
-    businessHours: form.businessHours.trim(),
-    infoAsOf,
-    location: { lat, lng },
-    closed: form.closed,
+    ok: true,
+    data: {
+      name,
+      address,
+      businessHours: form.businessHours.trim(),
+      infoAsOf,
+      location: { lat, lng },
+      closed: form.closed,
+    },
   };
 }
 
@@ -151,11 +170,15 @@ export default function AdminShopsPage() {
   const [listError, setListError] = useState<string | null>(null);
 
   const [createForm, setCreateForm] = useState<ShopFormState>(EMPTY_FORM);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createErrors, setCreateErrors] = useState<string[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<ShopFormState>(EMPTY_FORM);
-  const [editError, setEditError] = useState<string | null>(null);
+  const [editErrors, setEditErrors] = useState<string[]>([]);
+
+  const [deleteTarget, setDeleteTarget] = useState<Shop | null>(null);
+
+  const { message: successMessage, show: showSuccess } = useTransientMessage();
 
   // アンマウント後の setState を防ぐガード(/admin/performers, /admin/videos と同じパターン)
   const mountedRef = useRef(true);
@@ -197,18 +220,19 @@ export default function AdminShopsPage() {
 
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const parsed = parseFormState(createForm);
-    if (parsed === null) {
-      setCreateError("店名・住所・情報基準日・緯度経度を正しく入力してください");
+    const result = validateShopForm(createForm);
+    if (!result.ok) {
+      setCreateErrors(result.errors);
       return;
     }
-    setCreateError(null);
+    setCreateErrors([]);
     try {
-      await createShop({ ...parsed, tagIds: [], status: "draft" });
+      await createShop({ ...result.data, tagIds: [], status: "draft" });
       setCreateForm(EMPTY_FORM);
+      showSuccess("店舗を作成しました");
       await reload();
     } catch (error) {
-      setCreateError(`作成に失敗しました: ${errorMessage(error)}`);
+      setCreateErrors([`作成に失敗しました: ${errorMessage(error)}`]);
     }
   }
 
@@ -223,28 +247,29 @@ export default function AdminShopsPage() {
       lat: String(shop.location.lat),
       lng: String(shop.location.lng),
     });
-    setEditError(null);
+    setEditErrors([]);
   }
 
   function cancelEdit(): void {
     setEditingId(null);
-    setEditError(null);
+    setEditErrors([]);
   }
 
   async function handleEditSubmit(event: FormEvent<HTMLFormElement>, id: string): Promise<void> {
     event.preventDefault();
-    const parsed = parseFormState(editForm);
-    if (parsed === null) {
-      setEditError("店名・住所・情報基準日・緯度経度を正しく入力してください");
+    const result = validateShopForm(editForm);
+    if (!result.ok) {
+      setEditErrors(result.errors);
       return;
     }
     try {
-      await updateShop(id, parsed);
+      await updateShop(id, result.data);
       setEditingId(null);
-      setEditError(null);
+      setEditErrors([]);
+      showSuccess("店舗を更新しました");
       await reload();
     } catch (error) {
-      setEditError(`更新に失敗しました: ${errorMessage(error)}`);
+      setEditErrors([`更新に失敗しました: ${errorMessage(error)}`]);
     }
   }
 
@@ -260,9 +285,19 @@ export default function AdminShopsPage() {
     }
   }
 
+  async function confirmDelete(): Promise<void> {
+    if (deleteTarget === null) {
+      return;
+    }
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    await handleDelete(target.id);
+  }
+
   async function handleToggleStatus(id: string, nextStatus: PublishStatus): Promise<void> {
     try {
       await updateShop(id, { status: nextStatus });
+      showSuccess(nextStatus === "published" ? "店舗を公開しました" : "店舗を下書きに戻しました");
       await reload();
     } catch (error) {
       setListError(`ステータス変更に失敗しました: ${errorMessage(error)}`);
@@ -278,6 +313,8 @@ export default function AdminShopsPage() {
           または緯度経度の数値入力欄で設定できます。
         </p>
       </div>
+
+      <SuccessMessage testId="shop-success" message={successMessage} />
 
       <form
         data-testid="shop-create-form"
@@ -386,10 +423,15 @@ export default function AdminShopsPage() {
           }
         />
 
-        {createError !== null && (
-          <p data-testid="shop-create-error" className="text-sm text-red-600 dark:text-red-400">
-            {createError}
-          </p>
+        {createErrors.length > 0 && (
+          <ul
+            data-testid="shop-create-error"
+            className="flex flex-col gap-0.5 text-sm text-red-600 dark:text-red-400"
+          >
+            {createErrors.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
         )}
       </form>
 
@@ -551,13 +593,15 @@ export default function AdminShopsPage() {
                             }
                           />
 
-                          {editError !== null && (
-                            <p
+                          {editErrors.length > 0 && (
+                            <ul
                               data-testid="shop-edit-error"
-                              className="text-red-600 dark:text-red-400"
+                              className="flex flex-col gap-0.5 text-red-600 dark:text-red-400"
                             >
-                              {editError}
-                            </p>
+                              {editErrors.map((message) => (
+                                <li key={message}>{message}</li>
+                              ))}
+                            </ul>
                           )}
                         </form>
                       </td>
@@ -604,9 +648,7 @@ export default function AdminShopsPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                void handleDelete(shop.id);
-                              }}
+                              onClick={() => setDeleteTarget(shop)}
                               className="rounded border border-red-300 px-3 py-1 text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
                             >
                               削除
@@ -628,6 +670,18 @@ export default function AdminShopsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {deleteTarget !== null && (
+        <ConfirmDialog
+          testId="shop-delete-confirm"
+          title="店舗を削除しますか?"
+          message={`「${deleteTarget.name}」を削除します。この操作は取り消せません。`}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            void confirmDelete();
+          }}
+        />
       )}
     </div>
   );

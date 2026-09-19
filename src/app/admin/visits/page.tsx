@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * 訪問(Visit)登録CRUD画面(/admin/visits、タスク2-5)。
+ * 訪問(Visit)登録CRUD画面(/admin/visits、タスク2-5。バリデーション/削除確認/
+ * 成功フィードバックはタスク2-7で強化)。
  *
  * requirements.md「3.2 管理画面」「4. データモデル」visits に準拠し、
  * 店舗(shopId)×動画(videoId)を紐付け、出演者ごとの飲食メニュー
@@ -15,22 +16,26 @@
  * status(draft/published)は作成時に "draft" 固定とする。draft⇔published切替は
  * タスク2-6でPublishStatusToggle(共通コンポーネント)により一覧から行う。
  *
- * 入力バリデーションは最小限とする: 店舗・動画は必須選択、出演者の行は
- * 1件以上必須、各行は出演者選択必須+品目(空文字除く)1件以上必須とする
- * (本格的なエラー表示の作り込みはタスク2-7の範囲)。削除も確認ダイアログ
- * なしの即時実行とする(/admin/shops 等と同じパターン)。
+ * バリデーション: 店舗・動画は必須選択、出演者の行は1件以上必須、各行は
+ * 出演者選択必須+品目(空文字除く)1件以上必須とし、不足項目を具体的な
+ * エラーメッセージとしてまとめて表示する。削除は確認ダイアログを挟む。
+ * 作成・更新・公開切替の成功時は一時的な成功メッセージを表示する。
  *
  * 一覧では shopId/videoId/performerId を名称に解決して表示する
  * (マスタが削除されID解決できない場合はIDをそのまま表示するフォールバックとする)。
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { PublishStatusToggle } from "@/components/admin/PublishStatusToggle";
+import { SuccessMessage } from "@/components/admin/SuccessMessage";
 import { VisitConsumptionsForm } from "@/components/admin/VisitConsumptionsForm";
 import { listPerformers } from "@/repositories/performers";
 import { listShops } from "@/repositories/shops";
 import { listVideos } from "@/repositories/videos";
 import { createVisit, deleteVisit, listVisits, updateVisit } from "@/repositories/visits";
+import { useTransientMessage } from "@/lib/use-transient-message";
+import type { ValidationResult } from "@/lib/validation";
 import type { PublishStatus } from "@/types/common";
 import type { Performer } from "@/types/performer";
 import type { Shop } from "@/types/shop";
@@ -60,31 +65,40 @@ function errorMessage(error: unknown): string {
 /**
  * フォーム入力値を検証し、Firestoreへ書き込む形に変換する。
  * 店舗・動画が未選択、出演者の行が0件、いずれかの行で出演者未選択、
- * または品目(空文字除く)が0件の場合は null を返す。
+ * または品目(空文字除く)が0件の場合は、それぞれ具体的なエラーメッセージを返す。
  */
-function parseFormState(form: VisitFormState): ParsedVisitForm | null {
-  if (form.shopId === "" || form.videoId === "") {
-    return null;
+function validateVisitForm(form: VisitFormState): ValidationResult<ParsedVisitForm> {
+  const errors: string[] = [];
+
+  if (form.shopId === "") {
+    errors.push("店舗を選択してください");
+  }
+  if (form.videoId === "") {
+    errors.push("動画を選択してください");
   }
   if (form.consumptions.length === 0) {
-    return null;
+    errors.push("出演者ごとの飲食メニューを1件以上入力してください");
   }
+
   const consumptions: VisitConsumption[] = [];
-  for (const row of form.consumptions) {
+  form.consumptions.forEach((row, index) => {
     if (row.performerId === "") {
-      return null;
+      errors.push(`${index + 1}件目の出演者を選択してください`);
+      return;
     }
     const items = row.items.map((item) => item.trim()).filter((item) => item !== "");
     if (items.length === 0) {
-      return null;
+      errors.push(`${index + 1}件目の品目を1件以上入力してください`);
+      return;
     }
     consumptions.push({ performerId: row.performerId, items });
-  }
-  return { shopId: form.shopId, videoId: form.videoId, consumptions };
-}
+  });
 
-const VALIDATION_ERROR_MESSAGE =
-  "店舗・動画を選択し、出演者ごとの飲食メニューを1件以上(品目も1件以上)入力してください";
+  if (errors.length > 0 || consumptions.length !== form.consumptions.length) {
+    return { ok: false, errors };
+  }
+  return { ok: true, data: { shopId: form.shopId, videoId: form.videoId, consumptions } };
+}
 
 export default function AdminVisitsPage() {
   const [visits, setVisits] = useState<Visit[] | null>(null);
@@ -96,11 +110,15 @@ export default function AdminVisitsPage() {
   const [optionsError, setOptionsError] = useState<string | null>(null);
 
   const [createForm, setCreateForm] = useState<VisitFormState>(EMPTY_FORM);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createErrors, setCreateErrors] = useState<string[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<VisitFormState>(EMPTY_FORM);
-  const [editError, setEditError] = useState<string | null>(null);
+  const [editErrors, setEditErrors] = useState<string[]>([]);
+
+  const [deleteTarget, setDeleteTarget] = useState<Visit | null>(null);
+
+  const { message: successMessage, show: showSuccess } = useTransientMessage();
 
   // アンマウント後の setState を防ぐガード(/admin/shops, /admin/videos と同じパターン)
   const mountedRef = useRef(true);
@@ -175,18 +193,19 @@ export default function AdminVisitsPage() {
 
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const parsed = parseFormState(createForm);
-    if (parsed === null) {
-      setCreateError(VALIDATION_ERROR_MESSAGE);
+    const result = validateVisitForm(createForm);
+    if (!result.ok) {
+      setCreateErrors(result.errors);
       return;
     }
-    setCreateError(null);
+    setCreateErrors([]);
     try {
-      await createVisit({ ...parsed, status: "draft" });
+      await createVisit({ ...result.data, status: "draft" });
       setCreateForm(EMPTY_FORM);
+      showSuccess("訪問を作成しました");
       await reload();
     } catch (error) {
-      setCreateError(`作成に失敗しました: ${errorMessage(error)}`);
+      setCreateErrors([`作成に失敗しました: ${errorMessage(error)}`]);
     }
   }
 
@@ -197,28 +216,29 @@ export default function AdminVisitsPage() {
       videoId: visit.videoId,
       consumptions: visit.consumptions.map((row) => ({ ...row, items: [...row.items] })),
     });
-    setEditError(null);
+    setEditErrors([]);
   }
 
   function cancelEdit(): void {
     setEditingId(null);
-    setEditError(null);
+    setEditErrors([]);
   }
 
   async function handleEditSubmit(event: FormEvent<HTMLFormElement>, id: string): Promise<void> {
     event.preventDefault();
-    const parsed = parseFormState(editForm);
-    if (parsed === null) {
-      setEditError(VALIDATION_ERROR_MESSAGE);
+    const result = validateVisitForm(editForm);
+    if (!result.ok) {
+      setEditErrors(result.errors);
       return;
     }
     try {
-      await updateVisit(id, parsed);
+      await updateVisit(id, result.data);
       setEditingId(null);
-      setEditError(null);
+      setEditErrors([]);
+      showSuccess("訪問を更新しました");
       await reload();
     } catch (error) {
-      setEditError(`更新に失敗しました: ${errorMessage(error)}`);
+      setEditErrors([`更新に失敗しました: ${errorMessage(error)}`]);
     }
   }
 
@@ -234,9 +254,19 @@ export default function AdminVisitsPage() {
     }
   }
 
+  async function confirmDelete(): Promise<void> {
+    if (deleteTarget === null) {
+      return;
+    }
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    await handleDelete(target.id);
+  }
+
   async function handleToggleStatus(id: string, nextStatus: PublishStatus): Promise<void> {
     try {
       await updateVisit(id, { status: nextStatus });
+      showSuccess(nextStatus === "published" ? "訪問を公開しました" : "訪問を下書きに戻しました");
       await reload();
     } catch (error) {
       setListError(`ステータス変更に失敗しました: ${errorMessage(error)}`);
@@ -251,6 +281,8 @@ export default function AdminVisitsPage() {
           店舗×動画を紐付け、出演者ごとの飲食メニューを登録します。
         </p>
       </div>
+
+      <SuccessMessage testId="visit-success" message={successMessage} />
 
       {optionsError !== null && (
         <p data-testid="visit-options-error" className="text-sm text-red-600 dark:text-red-400">
@@ -316,10 +348,15 @@ export default function AdminVisitsPage() {
           </button>
         </div>
 
-        {createError !== null && (
-          <p data-testid="visit-create-error" className="text-sm text-red-600 dark:text-red-400">
-            {createError}
-          </p>
+        {createErrors.length > 0 && (
+          <ul
+            data-testid="visit-create-error"
+            className="flex flex-col gap-0.5 text-sm text-red-600 dark:text-red-400"
+          >
+            {createErrors.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
         )}
       </form>
 
@@ -410,13 +447,15 @@ export default function AdminVisitsPage() {
                       </button>
                     </div>
 
-                    {editError !== null && (
-                      <p
+                    {editErrors.length > 0 && (
+                      <ul
                         data-testid="visit-edit-error"
-                        className="text-sm text-red-600 dark:text-red-400"
+                        className="flex flex-col gap-0.5 text-sm text-red-600 dark:text-red-400"
                       >
-                        {editError}
-                      </p>
+                        {editErrors.map((message) => (
+                          <li key={message}>{message}</li>
+                        ))}
+                      </ul>
                     )}
                   </form>
                 ) : (
@@ -462,9 +501,7 @@ export default function AdminVisitsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          void handleDelete(visit.id);
-                        }}
+                        onClick={() => setDeleteTarget(visit)}
                         className="rounded border border-red-300 px-3 py-1 text-sm text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
                       >
                         削除
@@ -479,6 +516,18 @@ export default function AdminVisitsPage() {
             <p className="text-sm text-zinc-500 dark:text-zinc-400">訪問が登録されていません</p>
           )}
         </div>
+      )}
+
+      {deleteTarget !== null && (
+        <ConfirmDialog
+          testId="visit-delete-confirm"
+          title="訪問記録を削除しますか?"
+          message={`「${shopName(deleteTarget.shopId)} × ${videoTitle(deleteTarget.videoId)}」の訪問記録を削除します。この操作は取り消せません。`}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            void confirmDelete();
+          }}
+        />
       )}
     </div>
   );

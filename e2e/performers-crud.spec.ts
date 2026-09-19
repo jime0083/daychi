@@ -53,22 +53,68 @@ test.describe("出演者マスタCRUD(/admin/performers)", () => {
     await page.getByTestId("performer-create-order").fill(order);
     await page.getByRole("button", { name: "作成" }).click();
 
-    // 一覧表示: 作成した出演者が一覧に反映される
+    // 一覧表示: 作成した出演者が一覧に反映される(タスク2-7: 成功メッセージも表示される)
     const row = page.getByTestId("performer-row").filter({ hasText: name });
     await expect(row).toBeVisible();
     await expect(row.getByTestId("performer-order")).toHaveText(order);
     await expect(row).toContainText("○");
+    await expect(page.getByTestId("performer-success")).toContainText("出演者を作成しました");
 
-    // 編集: 名前を変更して保存する
+    // 編集: 名前を変更して保存する(タスク2-7: 成功メッセージも表示される)
     await row.getByRole("button", { name: "編集" }).click();
     await page.getByTestId("performer-edit-name").fill(updatedName);
     await page.getByRole("button", { name: "保存" }).click();
 
     const updatedRow = page.getByTestId("performer-row").filter({ hasText: updatedName });
     await expect(updatedRow).toBeVisible();
+    await expect(page.getByTestId("performer-success")).toContainText("出演者を更新しました");
 
-    // 削除: 一覧から削除される
+    // 削除: 確認ダイアログ(タスク2-7)で確認すると一覧から削除される
     await updatedRow.getByRole("button", { name: "削除" }).click();
+    await expect(page.getByTestId("performer-delete-confirm")).toBeVisible();
+    await page.getByTestId("performer-delete-confirm-confirm").click();
     await expect(page.getByTestId("performer-row").filter({ hasText: updatedName })).toHaveCount(0);
+  });
+
+  test("名前未入力で作成しようとするとエラーメッセージが表示され作成されない(タスク2-7)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+
+    await page.getByRole("link", { name: "出演者" }).click();
+    await expect(page.getByRole("heading", { name: "出演者マスタ" })).toBeVisible();
+
+    // 名前を空のまま作成しようとする
+    await page.getByRole("button", { name: "作成" }).click();
+
+    await expect(page.getByTestId("performer-create-error")).toContainText("名前を入力してください");
+    // バリデーションで弾かれ、フォームがクリアされていない(=作成処理が実行されていない)ことも確認する
+    await expect(page.getByTestId("performer-create-name")).toHaveValue("");
+  });
+
+  test("削除確認ダイアログでキャンセルすると削除されない(タスク2-7)", async ({ page }) => {
+    await loginAsAdmin(page);
+
+    await page.getByRole("link", { name: "出演者" }).click();
+    await expect(page.getByRole("heading", { name: "出演者マスタ" })).toBeVisible();
+
+    const name = `【E2Eテスト】${uniqueTestId("performer-cancel")}`;
+    await page.getByTestId("performer-create-name").fill(name);
+    await page.getByRole("button", { name: "作成" }).click();
+
+    const row = page.getByTestId("performer-row").filter({ hasText: name });
+    await expect(row).toBeVisible();
+
+    await row.getByRole("button", { name: "削除" }).click();
+    await expect(page.getByTestId("performer-delete-confirm")).toBeVisible();
+    await page.getByTestId("performer-delete-confirm-cancel").click();
+
+    await expect(page.getByTestId("performer-delete-confirm")).toHaveCount(0);
+    await expect(row).toBeVisible();
+
+    // 後片付け
+    await row.getByRole("button", { name: "削除" }).click();
+    await page.getByTestId("performer-delete-confirm-confirm").click();
+    await expect(page.getByTestId("performer-row").filter({ hasText: name })).toHaveCount(0);
   });
 });
