@@ -31,6 +31,32 @@
  *   二重発火することは基本的にないが、念のためstopPropagationしてから呼び出す。
  * - onShopClick/onBackgroundClickの参照はrefで保持し、shops配列が変わらない限り
  *   effectを再実行しない(呼び出し側がインラインの無名関数を渡しても安全なようにする)。
+ *
+ * タスク3-3(サイドバー動画一覧)での追加:
+ * - highlightedShopIds: サイドバーで動画をクリックした際、その動画で紹介された店舗の
+ *   ピンをハイライト表示するための店舗ID一覧(呼び出し側がsrc/lib/video-shop.tsの
+ *   resolveVideoShopIdsで算出する)。空配列/未指定時はハイライトなし。
+ * - 設計上の注意: ピン生成・初期fitBounds(店舗一覧の変化に伴うもの)を行うeffectは、
+ *   意図的に依存配列を `[shops]` のみに保つ(highlightedShopIdsを含めない)。
+ *   呼び出し側(src/app/page.tsx)ではhighlightedShopIdsは
+ *   `selectedVideoId === null ? [] : ...` というuseMemoで算出しており、
+ *   選択中の動画が無くても(内容が空のまま)visits等の依存先が更新される都度、
+ *   新しい空配列の参照が生成されうる。これをこの下のfitBounds用effectの依存に含めると、
+ *   「見た目上は同じ(空の)ハイライト状態」であるにもかかわらずeffectが再実行され、
+ *   短時間に複数回fitBoundsが呼ばれてMapLibreの内部状態(投影計算)が不安定になり、
+ *   ピンの座標がずれる不具合を引き起こすことを確認した。そのため
+ *   ハイライトの反映(DOM属性・見た目の更新)と地図フォーカス(flyTo/fitBounds)は、
+ *   ピン生成・初期fitBoundsとは完全に別のeffectとして分離し、既存markerの要素を
+ *   直接更新するだけに留める(マーカーの再生成・カメラの再フィットは行わない)。
+ * - ハイライトの見た目: 通常ピンと視覚的に区別するため、要素のCSS filterを変更する
+ *   (SVG内部のfill色を直接書き換えるより単純で、MapLibreが管理するtransform
+ *   (位置決め)スタイルとは独立して指定できるため)。
+ * - 決定的なE2E検証のため、各Marker要素に data-highlighted="true"/"false" を
+ *   必ず付与する(色の見た目に頼らずDOM属性で検証できるようにするため)。
+ * - highlightedShopIdsが変化した際、対象の店舗が1件ならその店舗を中心にflyTo、
+ *   複数件なら全店舗が収まるようfitBoundsする(該当店舗が複数動画で紹介されている
+ *   ケースへの対応。「代表1店舗にフォーカス」ではなく「全店舗が収まるようフィット」を
+ *   採用する。理由: 一部の店舗だけが画面外になり見落とされることを避けるため)。
  */
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -40,6 +66,7 @@ import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   MAP_FIT_BOUNDS_PADDING,
+  MAP_PIN_HIGHLIGHT_FILTER,
   MAP_STYLE_URL,
 } from "@/lib/map-config";
 import type { Shop } from "@/types/shop";
@@ -54,15 +81,35 @@ interface PublicMapProps {
   onShopClick?: (shopId: string) => void;
   /** ピン以外の地図背景クリック時に呼ばれるコールバック(タスク3-2: 詳細シートを閉じる用途) */
   onBackgroundClick?: () => void;
+  /**
+   * ハイライト表示(かつ地図フォーカス)対象の店舗ID一覧(タスク3-3)。
+   * 空配列/未指定の場合は通常表示・フォーカスなし
+   */
+  highlightedShopIds?: string[];
 }
 
-export function PublicMap({ shops, onShopClick, onBackgroundClick }: PublicMapProps) {
+/** マーカー要素にハイライト状態(data属性・見た目)を反映する */
+function applyHighlightState(marker: maplibregl.Marker, highlightedShopIds: string[]): void {
+  const element = marker.getElement();
+  const shopId = element.dataset.shopId;
+  const isHighlighted = shopId !== undefined && highlightedShopIds.includes(shopId);
+  element.dataset.highlighted = isHighlighted ? "true" : "false";
+  element.style.filter = isHighlighted ? MAP_PIN_HIGHLIGHT_FILTER : "";
+}
+
+export function PublicMap({
+  shops,
+  onShopClick,
+  onBackgroundClick,
+  highlightedShopIds = [],
+}: PublicMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
 
-  // 最新のコールバックをrefで保持する(下のeffectの依存配列に含めないことで、
-  // 呼び出し側がインラインの無名関数を渡しても地図/ピンの再生成が起きないようにする)
+  // 最新のコールバック/ハイライト対象をrefで保持する(下のeffectの依存配列に含めないことで、
+  // 呼び出し側がインラインの無名関数を渡しても地図/ピンの再生成が起きないようにする。
+  // highlightedShopIdsRefは、ピン生成時に初期ハイライト状態を反映するために使う)
   const onShopClickRef = useRef(onShopClick);
   useEffect(() => {
     onShopClickRef.current = onShopClick;
@@ -72,6 +119,8 @@ export function PublicMap({ shops, onShopClick, onBackgroundClick }: PublicMapPr
   useEffect(() => {
     onBackgroundClickRef.current = onBackgroundClick;
   }, [onBackgroundClick]);
+
+  const highlightedShopIdsRef = useRef(highlightedShopIds);
 
   // 地図本体の初期化(マウント時に一度だけ)。中心・ズームの初期値はダミーで、
   // 実際の表示範囲は下のeffect(shopsを購読)でfitBounds/setCenterにより確定する
@@ -99,7 +148,8 @@ export function PublicMap({ shops, onShopClick, onBackgroundClick }: PublicMapPr
     };
   }, []);
 
-  // shopsの変更をピン表示・表示範囲に反映する
+  // shopsの変更をピン表示・表示範囲に反映する(タスク3-1と同じ依存配列 [shops] のみ。
+  // 上のコメント「設計上の注意」の通り、highlightedShopIdsはここに含めない)
   useEffect(() => {
     const map = mapRef.current;
     if (map === null) {
@@ -124,6 +174,9 @@ export function PublicMap({ shops, onShopClick, onBackgroundClick }: PublicMapPr
         event.stopPropagation();
         onShopClickRef.current?.(shop.id);
       });
+      // タスク3-3: 生成時点の最新のハイライト対象を反映しておく
+      // (highlightedShopIdsRef.current。この後のハイライト同期effectでも継続的に更新される)
+      applyHighlightState(marker, highlightedShopIdsRef.current);
       return marker;
     });
 
@@ -145,6 +198,45 @@ export function PublicMap({ shops, onShopClick, onBackgroundClick }: PublicMapPr
       duration: 0,
     });
   }, [shops]);
+
+  // タスク3-3: highlightedShopIdsが変化した時、既存マーカー要素のハイライト状態
+  // (data属性・見た目)のみを更新する。マーカーの再生成・カメラの移動は行わない
+  // (カメラの移動は下の別effectが担当する)
+  useEffect(() => {
+    highlightedShopIdsRef.current = highlightedShopIds;
+    markersRef.current.forEach((marker) => applyHighlightState(marker, highlightedShopIds));
+  }, [highlightedShopIds]);
+
+  // タスク3-3: highlightedShopIdsが変化した時(=サイドバーで動画がクリックされた時)、
+  // 対象店舗にカメラをフォーカスする。1件ならflyTo、複数件なら全店舗が収まるようfitBoundsする
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map === null || highlightedShopIds.length === 0) {
+      return;
+    }
+
+    const targetShops = shops.filter((shop) => highlightedShopIds.includes(shop.id));
+    if (targetShops.length === 0) {
+      return;
+    }
+
+    if (targetShops.length === 1) {
+      map.flyTo({
+        center: [targetShops[0].location.lng, targetShops[0].location.lat],
+        zoom: DEFAULT_MAP_ZOOM,
+      });
+      return;
+    }
+
+    const bounds = new maplibregl.LngLatBounds();
+    targetShops.forEach((shop) => {
+      bounds.extend([shop.location.lng, shop.location.lat]);
+    });
+    map.fitBounds(bounds, {
+      padding: MAP_FIT_BOUNDS_PADDING,
+      maxZoom: DEFAULT_MAP_ZOOM,
+    });
+  }, [highlightedShopIds, shops]);
 
   return <div ref={containerRef} data-testid="public-map" className="h-full w-full" />;
 }

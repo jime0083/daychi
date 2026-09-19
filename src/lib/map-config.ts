@@ -26,3 +26,15 @@ export const DEFAULT_MAP_ZOOM = 14;
  * ピンが地図の端に接してしまい見切れることを防ぐための値であり、特定の店舗データには依存しない。
  */
 export const MAP_FIT_BOUNDS_PADDING = 48;
+
+/**
+ * サイドバー動画クリックでフォーカスした店舗のピンをハイライト表示する際のCSS filter値
+ * (タスク3-3)。既定ピン(maplibregl.Markerのデフォルト色)と視覚的に区別するための
+ * UIスタイル定数であり、特定の店舗データには依存しない。
+ *
+ * maplibregl.Markerの色をピン生成後に変更するAPIは無い(生成時のcolorオプションでのみ
+ * 指定可能)ため、CSS filterでピン要素(SVGを含むDOM要素全体)の色味を変える方式を採る。
+ * これによりMapLibreが位置決めに使うtransformスタイルとは独立に、マーカーの
+ * 再生成なしでハイライトのオン/オフを切り替えられる(src/components/map/PublicMap.tsx参照)。
+ */
+export const MAP_PIN_HIGHLIGHT_FILTER = "hue-rotate(150deg) saturate(1.8) brightness(0.95)";
