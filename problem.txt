@@ -197,3 +197,26 @@
   地図API使用箇所は無変更)。npm audit で critical 0件を確認。npm run e2e(desktop+mobile
   14件)2回連続グリーン、実ブラウザで地図描画・座標反映・SSRエラー無しをレビューで確認。
   moderate 8件(firebase-tools系dev依存)はP-006対象外の既存事象として別途方針検討
+
+## P-007: performers-crud.spec.ts の表示順アサーションがフレーキー
+- 記録日: 2026-09-22
+- 状態: 修正中
+- 発生箇所: e2e/performers-crud.spec.ts(タスク2-2で作成)。タスク2-6のレビュー中に発覚
+- 問題内容:
+  想定した動き: E2Eが決定的に(毎回)グリーンになる
+  実際の動き: performers-crud(mobile)が約0.4%の確率でstrict modeのタイムアウトで失敗
+- 再現手順:
+  1. npm run e2e を多数回実行すると、まれに performers-crud.spec.ts が失敗する
+- 原因調査:
+  - performers-crud.spec.ts:49 で表示順に固定値 "42" を入力し、row.getByText("42") で
+    部分一致検索している
+  - uniqueTestId()(src/repositories/test-support.ts:65)が生成するランダムID
+    (例 1789827262544-42c0xi)がたまたま "42" を部分文字列として含むと、
+    Playwrightのstrict modeが2要素にマッチしてタイムアウトする
+  - タスク2-6のdiffとは無関係の既存事象(コミット40766e8/タスク2-2由来)
+- 特定した原因:
+  テストの表示順アサーションが厳密ロケータでなく部分一致テキスト検索であり、
+  ランダムIDと衝突しうること(テストコードの堅牢性不足)
+- 切り出したタスク: progress.txt タスク2-2a(performers-crud E2Eのフレーキー修正)
+- 解決日:
+- 解決内容:
