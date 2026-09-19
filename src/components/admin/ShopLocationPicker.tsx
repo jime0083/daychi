@@ -17,7 +17,7 @@
  * - このコンポーネントは location props を表示し、ユーザー操作(クリック/ドラッグ)を
  *   onChangeで呼び出し側に通知するだけの制御コンポーネントとする(自身では状態を持たない)。
  */
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
 
