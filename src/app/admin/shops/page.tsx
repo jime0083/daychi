@@ -6,8 +6,8 @@
  * requirements.md「3.2 管理画面」「4. データモデル」shops に準拠し、
  * 店名・住所・営業時間・情報基準日(infoAsOf)・閉店フラグ・緯度経度(location)の
  * CRUDを行う。tagIds(Phase 5用)は本タスクの範囲外のため常に空配列で保存する。
- * status(draft/published)は本タスクでは作成時に "draft" 固定とする
- * (draft⇔published切替UIはタスク2-6の範囲)。
+ * status(draft/published)は作成時に "draft" 固定とする。draft⇔published切替は
+ * タスク2-6でPublishStatusToggle(共通コンポーネント)により一覧から行う。
  *
  * 地図ピン位置指定:
  * - MapLibre GL JS + OpenFreeMap(src/lib/map-config.ts)を使い、地図クリック/
@@ -26,9 +26,10 @@ import { Timestamp } from "firebase/firestore";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
+import { PublishStatusToggle } from "@/components/admin/PublishStatusToggle";
 import { createShop, deleteShop, listShops, updateShop } from "@/repositories/shops";
 import type { Shop } from "@/types/shop";
-import type { GeoLocation } from "@/types/common";
+import type { GeoLocation, PublishStatus } from "@/types/common";
 import { DEFAULT_MAP_CENTER } from "@/lib/map-config";
 
 // MapLibreはwindow/documentに依存するため、SSRでは描画せずクライアントでのみマウントする
@@ -256,6 +257,15 @@ export default function AdminShopsPage() {
       await reload();
     } catch (error) {
       setListError(`削除に失敗しました: ${errorMessage(error)}`);
+    }
+  }
+
+  async function handleToggleStatus(id: string, nextStatus: PublishStatus): Promise<void> {
+    try {
+      await updateShop(id, { status: nextStatus });
+      await reload();
+    } catch (error) {
+      setListError(`ステータス変更に失敗しました: ${errorMessage(error)}`);
     }
   }
 
@@ -572,11 +582,19 @@ export default function AdminShopsPage() {
                         >
                           {shop.location.lat.toFixed(6)}, {shop.location.lng.toFixed(6)}
                         </td>
-                        <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">
+                        <td
+                          data-testid="shop-status"
+                          className="py-2 pr-4 text-zinc-700 dark:text-zinc-300"
+                        >
                           {shop.status === "published" ? "公開" : "下書き"}
                         </td>
                         <td className="py-2 pr-4">
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
+                            <PublishStatusToggle
+                              status={shop.status}
+                              testId="shop-status-toggle"
+                              onToggle={(nextStatus) => handleToggleStatus(shop.id, nextStatus)}
+                            />
                             <button
                               type="button"
                               onClick={() => startEdit(shop)}

@@ -12,8 +12,8 @@
  * 出演者名)。これらのマスタは他の管理画面(2-2〜2-4)で管理されるため、
  * このページでは一覧取得のみ行い、作成・編集は行わない。
  *
- * status(draft/published)は本タスクでは作成時に "draft" 固定とする
- * (draft⇔published切替UIはタスク2-6の範囲)。
+ * status(draft/published)は作成時に "draft" 固定とする。draft⇔published切替は
+ * タスク2-6でPublishStatusToggle(共通コンポーネント)により一覧から行う。
  *
  * 入力バリデーションは最小限とする: 店舗・動画は必須選択、出演者の行は
  * 1件以上必須、各行は出演者選択必須+品目(空文字除く)1件以上必須とする
@@ -25,11 +25,13 @@
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
+import { PublishStatusToggle } from "@/components/admin/PublishStatusToggle";
 import { VisitConsumptionsForm } from "@/components/admin/VisitConsumptionsForm";
 import { listPerformers } from "@/repositories/performers";
 import { listShops } from "@/repositories/shops";
 import { listVideos } from "@/repositories/videos";
 import { createVisit, deleteVisit, listVisits, updateVisit } from "@/repositories/visits";
+import type { PublishStatus } from "@/types/common";
 import type { Performer } from "@/types/performer";
 import type { Shop } from "@/types/shop";
 import type { Video } from "@/types/video";
@@ -232,6 +234,15 @@ export default function AdminVisitsPage() {
     }
   }
 
+  async function handleToggleStatus(id: string, nextStatus: PublishStatus): Promise<void> {
+    try {
+      await updateVisit(id, { status: nextStatus });
+      await reload();
+    } catch (error) {
+      setListError(`ステータス変更に失敗しました: ${errorMessage(error)}`);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -419,7 +430,10 @@ export default function AdminVisitsPage() {
                           {videoTitle(visit.videoId)}
                         </p>
                       </div>
-                      <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                      <span
+                        data-testid="visit-status"
+                        className="text-sm text-zinc-700 dark:text-zinc-300"
+                      >
                         {visit.status === "published" ? "公開" : "下書き"}
                       </span>
                     </div>
@@ -433,7 +447,12 @@ export default function AdminVisitsPage() {
                         </li>
                       ))}
                     </ul>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <PublishStatusToggle
+                        status={visit.status}
+                        testId="visit-status-toggle"
+                        onToggle={(nextStatus) => handleToggleStatus(visit.id, nextStatus)}
+                      />
                       <button
                         type="button"
                         onClick={() => startEdit(visit)}

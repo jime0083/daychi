@@ -9,8 +9,8 @@
  * 公開日(publishedAt)は手入力する。ドキュメントID = YouTube動画IDとして作成する
  * (src/repositories/videos.ts の createVideo は元々ID指定作成に対応済み)。
  *
- * status(draft/published)は本タスクでは作成時に "draft" 固定とする
- * (draft⇔published切替UIはタスク2-6の範囲)。
+ * status(draft/published)は作成時に "draft" 固定とする。draft⇔published切替は
+ * タスク2-6でPublishStatusToggle(共通コンポーネント)により一覧から行う。
  *
  * 入力バリデーションは最小限(必須項目のみ)とし、削除も確認ダイアログなしの
  * 即時実行とする(作り込みはタスク2-7の範囲。/admin/performers の実装パターンに倣う)。
@@ -18,7 +18,9 @@
 import { Timestamp } from "firebase/firestore";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
+import { PublishStatusToggle } from "@/components/admin/PublishStatusToggle";
 import { createVideo, deleteVideo, listVideos, updateVideo } from "@/repositories/videos";
+import type { PublishStatus } from "@/types/common";
 import type { Video } from "@/types/video";
 import { buildYoutubeThumbnailUrl, extractYouTubeVideoId } from "@/lib/youtube";
 
@@ -214,6 +216,15 @@ export default function AdminVideosPage() {
       await reload();
     } catch (error) {
       setListError(`削除に失敗しました: ${errorMessage(error)}`);
+    }
+  }
+
+  async function handleToggleStatus(id: string, nextStatus: PublishStatus): Promise<void> {
+    try {
+      await updateVideo(id, { status: nextStatus });
+      await reload();
+    } catch (error) {
+      setListError(`ステータス変更に失敗しました: ${errorMessage(error)}`);
     }
   }
 
@@ -415,11 +426,19 @@ export default function AdminVideosPage() {
                         <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">
                           {formatDateForDisplay(video.publishedAt)}
                         </td>
-                        <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">
+                        <td
+                          data-testid="video-status"
+                          className="py-2 pr-4 text-zinc-700 dark:text-zinc-300"
+                        >
                           {video.status === "published" ? "公開" : "下書き"}
                         </td>
                         <td className="py-2 pr-4">
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
+                            <PublishStatusToggle
+                              status={video.status}
+                              testId="video-status-toggle"
+                              onToggle={(nextStatus) => handleToggleStatus(video.id, nextStatus)}
+                            />
                             <button
                               type="button"
                               onClick={() => startEdit(video)}
