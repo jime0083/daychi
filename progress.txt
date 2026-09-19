@@ -110,7 +110,7 @@ Phase 2: 管理画面
     内容: shops/videos/visits の一覧にステータス表示と draft⇔published 切替ボタン
     完了条件: E2E合格(切替操作でFirestoreのstatusが変わり表示に反映される)
 
-[ ] 2-7 管理画面仕上げ
+[x] 2-7 管理画面仕上げ (2026-09-22 レビューPASS。oEmbed認可の401/403/200確認済み)
     内容: 全フォームの入力バリデーション、エラー表示、削除確認ダイアログ、
           保存成功のフィードバック表示。
           加えて /api/admin/oembed への認可を追加する(2-3レビュー所見: 現状は未認証
@@ -119,6 +119,8 @@ Phase 2: 管理画面
               /api/admin/oembed が未認証リクエストを拒否すること
 
 [ ] 2-8 Firebase App Hosting初回デプロイ
+    ※2026-09-22 保留: W1/W3/W10 が未着手のため、本タスクは後回しにし先にPhase 3を
+      emulator上で進める方針(ユーザー決定)。手動作業が揃い次第このタスクを実施する
     ※開始前確認: manual-work W1(Firebaseプロジェクト)・W3(GitHub連携)完了必須
     内容: App Hosting設定(apphosting.yaml)、本番環境変数設定、デプロイ実行。
           管理者クレーム付与スクリプト scripts/set-admin-claim.ts(Admin SDK使用、
