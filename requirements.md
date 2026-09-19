@@ -51,7 +51,7 @@ YouTubeチャンネル「Daychi〜COFFEE CHANNEL」で紹介されたコーヒ�
 
 ### 3.2 管理画面(/admin)
 
-- Firebase Auth(Googleログイン)。環境変数で指定した管理者メールアドレスのみアクセス可。それ以外はログイン後もアクセス拒否
+- Firebase Auth(Googleログイン)。管理者クレーム(admin == true)を持つアカウントのみアクセス可。それ以外はログイン後もアクセス拒否(セキュリティルールと同一基準。「4. データモデル」の管理者判定を参照)
 - 機能:
   - 出演者マスタCRUD(名前、メイン出演者フラグ、表示順)
   - 動画登録: YouTube URLを貼り付け → 動画IDを抽出 → oEmbed APIでタイトル自動取得 → 公開日は手入力。一覧・編集・削除
@@ -100,7 +100,12 @@ tags/{id}               // Phase 5
 
 **セキュリティルール方針:**
 - read: status == "published" のドキュメントのみ誰でも可(tags/performersは全read可)
-- write: 管理者のみ(Firebase Authのメールアドレス判定はカスタムクレームまたはルール内メール判定)
+- write: 管理者のみ
+- 管理者判定はカスタムクレーム方式(request.auth.token.admin == true)で統一する(2026-09-19確定)
+  - 本番環境へのクレーム付与は、Admin SDKを使う手動スクリプト(scripts/set-admin-claim.ts)を
+    デプロイ後に一度実行して行う(実行にはサービスアカウントキーが必要。manual-work W10)
+  - 管理者のメールアドレスはコード・ルールにハードコードせず環境変数で扱う
+  - ローカル開発・E2EではAuth Emulatorに対してテスト用クレームを付与する(1-5で確立済み)
 
 ## 5. AI自動抽出パイプライン(Phase 4)
 

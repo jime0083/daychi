@@ -50,12 +50,19 @@ Phase 1: 開発基盤 【完了 2026-09-19】
           (CLAUDE.mdのコマンド表更新はメインエージェントが実施)
     完了条件: .next を削除した状態から npm run typecheck がパスする
 
+[x] 1-8 lint除外設定の修正(P-004対応) (2026-09-22 レビューPASS)
+    内容: eslint.config.mjs の globalIgnores に e2e/artifacts/**、playwright-report/**、
+          test-results/** を追加し、Playwright生成物がlint対象にならないようにする。
+          e2e実行でartifactsが生成された状態でも npm run lint が安定してパスするようにする
+    完了条件: npm run e2e を実行しartifacts生成後の状態で npm run lint がパス(exit 0)。
+              src/e2e配下の実コードは引き続きlint対象であること(除外しすぎていないこと)
+
 =====================================
 Phase 2: 管理画面
 ※開始前確認: manual-work W2(管理者メールアドレス)完了必須
 =====================================
 
-[ ] 2-1 管理画面レイアウトとGoogle認証
+[x] 2-1 管理画面レイアウトとGoogle認証 (2026-09-22 レビューPASS、P-005修正の検証含む)
     内容: /admin ルート群のレイアウト作成。Googleログインボタン。
           環境変数の管理者メールアドレスと一致しない場合はアクセス拒否画面。
           未ログイン時はログイン画面へ
@@ -93,9 +100,12 @@ Phase 2: 管理画面
 
 [ ] 2-8 Firebase App Hosting初回デプロイ
     ※開始前確認: manual-work W1(Firebaseプロジェクト)・W3(GitHub連携)完了必須
-    内容: App Hosting設定(apphosting.yaml)、本番環境変数設定、デプロイ実行
+    内容: App Hosting設定(apphosting.yaml)、本番環境変数設定、デプロイ実行。
+          管理者クレーム付与スクリプト scripts/set-admin-claim.ts(Admin SDK使用、
+          サービスアカウントキーを引数/環境変数で受け取る)の作成もここで行う
     完了条件: 本番URLで /admin にGoogleログインでき、データ登録が動作する
               (daychi-reviewは本番URLに対するスモークE2Eで確認)
+              ※クレーム付与の実行は manual-work W10 完了後
 
 =====================================
 Phase 3: 公開ページ

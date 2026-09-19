@@ -106,3 +106,65 @@
   (ルールテストで確立済みのパターン)に変更。あわせてFirestore接続残留でnodeが
   終了しない問題に process.exit() を明示。npm run e2e 3回連続グリーンで解決確認。
   検証はタスク1-6のレビュー(daychi-review)に含めて実施
+
+## P-004: npm run lint が e2e/artifacts の生成物を走査して大量エラーになる
+- 記録日: 2026-09-22
+- 状態: 解決済み
+- 発生箇所: eslint.config.mjs(タスク2-1の検証中に発覚)
+- 問題内容:
+  想定した動き: npm run lint がプロジェクトのソースのみを対象にパスする
+  実際の動き: npm run e2e 実行後、e2e/artifacts/html-report 配下のPlaywright生成JS
+  (圧縮済み)をESLintが走査し、259エラー・約2795警告で失敗する
+- 再現手順:
+  1. npm run e2e を1回実行(e2e/artifacts/html-report が生成される)
+  2. npm run lint を実行 → 生成物由来の大量エラーで失敗
+- 原因調査:
+  - eslint.config.mjs の globalIgnores は .next/**, out/**, build/**, next-env.d.ts のみ
+    を除外しており、e2e/artifacts/** が除外対象に入っていない
+  - ESLint(flat config)は .gitignore を自動参照しないため、gitignore済みでも走査される
+  - npx eslint src e2e --ignore-pattern 'e2e/artifacts/**' は exit 0(2-1コード自体は健全)
+    → 失敗はすべて生成物由来と確認
+  - 1-6のレビューでlintがパスしたのは、lint実行時点でartifactsが未生成だった等の
+    実行順序に依存していたため。恒常的な設定不足が根本原因
+- 特定した原因:
+  eslint.config.mjs の除外リストに e2e/artifacts(および playwright-report / test-results)
+  が含まれていないこと。lintの対象範囲設定の不足
+- 切り出したタスク: progress.txt タスク1-8(lint除外設定の修正)
+- 解決日: 2026-09-22
+- 解決内容:
+  eslint.config.mjs の globalIgnores に e2e/artifacts/**、playwright-report/**、
+  test-results/** を追加(コミット b75cc29)。artifacts生成済みの状態で npm run lint が
+  exit 0 でパスすること、実コード(src/e2e配下)は引き続きlint対象であることを
+  実装・レビュー双方で確認
+
+## P-005: /admin がクライアント側で auth/invalid-api-key でクラッシュする
+- 記録日: 2026-09-22
+- 状態: 解決済み
+- 発生箇所: src/lib/firebase-config.ts(Phase 1のタスク1-2/1-4由来の潜在バグ。タスク2-1のE2E 6件失敗として顕在化)
+- 問題内容:
+  想定した動き: /admin がブラウザで表示され、ログイン/アクセス拒否/管理画面の3分岐が動く
+  実際の動き: クライアント側レンダリング時に getAuth() が auth/invalid-api-key を投げ、
+  UIが一切描画される前にページ全体がクラッシュ。admin-auth.spec.ts が6件(3シナリオ×2プロジェクト)失敗
+- 再現手順:
+  1. NEXT_PUBLIC_USE_EMULATOR=true で npm run e2e を実行
+  2. admin-auth.spec.ts の全シナリオが同一原因で失敗
+- 原因調査:
+  - firebase-config.ts の関数群が env: NodeJS.ProcessEnv = process.env を引数に取り、
+    本体で env.NEXT_PUBLIC_X と間接参照していた
+  - Next.js/Turbopack はクライアントバンドルへ「リテラルな process.env.NEXT_PUBLIC_X」
+    のみをインライン展開する。エイリアス経由(env.NEXT_PUBLIC_X)は静的解析で見えず
+    undefined になる
+  - 結果、ブラウザ側で全 NEXT_PUBLIC_* が undefined となり getAuth() が例外
+  - Phase 1ではクライアントからこの初期化を通る画面が無かったため潜在化していた
+- 特定した原因:
+  クライアント向けFirebase設定の環境変数を間接参照していたため、Next.jsの静的置換が
+  効かずクライアントバンドルで値が欠落したこと
+- 切り出したタスク: タスク2-1の範囲内で修正(2-1の完了条件E2Eに必須のため)
+- 解決日: 2026-09-22
+- 解決内容:
+  firebase-config.ts を、リテラルな process.env.NEXT_PUBLIC_X を直接書く readEnv()
+  ヘルパー方式に変更(呼び出しごとに評価。テストのprocess.env変更も反映)。
+  Auth Emulatorモード用に demo API key フォールバックも追加。npm run e2e 8件全通過で
+  解決確認。検証はタスク2-1のレビュー(daychi-review)に含めて実施。
+  【今後の注意】クライアント側で NEXT_PUBLIC_* を読む場合は必ずリテラル参照にすること
+  (2-2以降で新たな env 依存のクライアント設定を追加する場合に留意)
