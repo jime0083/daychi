@@ -57,7 +57,7 @@ Phase 1: 開発基盤 【完了 2026-09-19】
     完了条件: npm run e2e を実行しartifacts生成後の状態で npm run lint がパス(exit 0)。
               src/e2e配下の実コードは引き続きlint対象であること(除外しすぎていないこと)
 
-[ ] 2-2a performers-crud E2Eのフレーキー修正(P-007対応)
+[x] 2-2a performers-crud E2Eのフレーキー修正(P-007対応) (2026-09-22 レビューPASS)
     内容: e2e/performers-crud.spec.ts の表示順アサーション(49・55行目付近の
           row.getByText("42") 等の部分一致)を、厳密なロケータ(getByTestId等で
           表示順セルを特定し toHaveText で完全一致)に直す。ランダムIDと衝突しない

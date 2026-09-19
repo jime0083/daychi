@@ -200,7 +200,7 @@
 
 ## P-007: performers-crud.spec.ts の表示順アサーションがフレーキー
 - 記録日: 2026-09-22
-- 状態: 修正中
+- 状態: 解決済み
 - 発生箇所: e2e/performers-crud.spec.ts(タスク2-2で作成)。タスク2-6のレビュー中に発覚
 - 問題内容:
   想定した動き: E2Eが決定的に(毎回)グリーンになる
@@ -218,5 +218,10 @@
   テストの表示順アサーションが厳密ロケータでなく部分一致テキスト検索であり、
   ランダムIDと衝突しうること(テストコードの堅牢性不足)
 - 切り出したタスク: progress.txt タスク2-2a(performers-crud E2Eのフレーキー修正)
-- 解決日:
+- 解決日: 2026-09-22
 - 解決内容:
+  performers/page.tsx の表示順セルに data-testid="performer-order" を付与し、
+  performers-crud.spec.ts のアサーションを row.getByTestId("performer-order") +
+  toHaveText の厳密一致に変更(部分一致 getByText を廃止)。入力値も "42"→"917" に変更。
+  コミット 72cea1b。npm run e2e を3回連続実行し22件グリーン(フレーキー再発なし)を
+  実装・レビュー双方で確認
