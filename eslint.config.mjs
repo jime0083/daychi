@@ -15,6 +15,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Playwright実行時の生成物(P-004対応)。src/ および e2e/ 配下の実コードは対象外にしない
+    "e2e/artifacts/**",
+    "playwright-report/**",
+    "test-results/**",
   ]),
 ]);
 
