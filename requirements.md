@@ -90,6 +90,7 @@ visits/{id}             // 店舗×動画の中間コレクション
   shopId: string
   videoId: string
   consumptions: [ { performerId: string, items: string[] } ]  // 出演者ごとの飲食メニュー
+  // 同一performerIdが複数要素に含まれることを許容する(重複防止バリデーションは行わない。2026-09-22決定)
   status: "draft" | "published"
   createdAt / updatedAt: Timestamp
 
