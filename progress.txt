@@ -78,7 +78,16 @@ Phase 2: 管理画面
           サムネイル(i.ytimg.com)プレビュー表示
     完了条件: E2E合格(URL貼付→タイトル自動入力→保存→一覧にサムネ表示)
 
-[ ] 2-4 店舗登録CRUD(地図ピン位置指定)
+[x] 2-4 店舗登録CRUD(地図ピン位置指定) (2026-09-22 レビューPASS。当初P-006でFAIL→2-4a修正後に再確認しPASS)
+
+[x] 2-4a maplibre-gl のセキュリティ更新(P-006対応) (2026-09-22 レビューPASS)
+    内容: maplibre-gl を 6.10.0 以降(脆弱性 GHSA-jrc7-96c5-q579 修正版)へ更新する。
+          v5→v6のメジャー更新だが、本コードの使用APIは Map/Marker/on/setLngLat/
+          getLngLat/remove/setCenter 等に限定されるため影響は限定的の見込み。
+          破壊的変更の有無を確認し、必要なら ShopLocationPicker.tsx を追随修正する
+    完了条件: npm audit で maplibre-gl の critical が解消(0件)。
+              npm run typecheck / lint / test / e2e(desktop+mobile)が全てグリーン。
+              特に shops-crud と地図描画(SSRエラーなし)が引き続き動作すること
     内容: /admin/shops 一覧・作成・編集・削除。項目: 店名・住所・営業時間・
           情報基準日(infoAsOf)・閉店フラグ。MapLibre地図上でピンをドラッグして
           緯度経度を確定するUI

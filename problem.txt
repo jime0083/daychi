@@ -168,3 +168,32 @@
   解決確認。検証はタスク2-1のレビュー(daychi-review)に含めて実施。
   【今後の注意】クライアント側で NEXT_PUBLIC_* を読む場合は必ずリテラル参照にすること
   (2-2以降で新たな env 依存のクライアント設定を追加する場合に留意)
+
+## P-006: maplibre-gl@5.24.0 に本番依存の critical 脆弱性(XSS)
+- 記録日: 2026-09-22
+- 状態: 解決済み
+- 発生箇所: package.json の dependencies(タスク2-4で追加)。タスク2-4のレビューでFAIL事由として検出
+- 問題内容:
+  想定した動き: 本番依存に critical/high 脆弱性を持ち込まない
+  実際の動き: タスク2-4で追加した maplibre-gl@5.24.0 に critical 脆弱性
+  GHSA-jrc7-96c5-q579(XSS Sanitizer Bypass in DOM.sanitize())が含まれる
+- 再現手順:
+  1. npm audit を実行 → critical 1件(maplibre-gl@5.24.0、isDirect:true、dependencies)
+- 原因調査:
+  - タスク2-4(コミット 8351293)で地図UI用に maplibre-gl@^5.24.0 を追加した
+  - 5.24.0 は GHSA-jrc7-96c5-q579 の影響を受けるバージョン
+  - 現状の実使用での実害経路は低い(Popup.setHTMLで未信頼HTMLを描画しておらず、
+    draggable Marker と信頼できるOpenFreeMapスタイルURLのみ使用)が、脆弱コードは
+    本番に同梱され、Phase 3(3-1 公開ページ地図)でも再利用されるため放置不可
+  - moderate 8件は firebase-tools(dev依存、Phase 1導入)配下のtransitiveで本番非同梱・
+    本問題とは別事象(別途 dev依存更新方針を検討。P-006の対象外)
+- 特定した原因:
+  脆弱性を含む maplibre-gl@5.24.0 を本番依存に追加したこと
+- 切り出したタスク: progress.txt タスク2-4a(maplibre-gl のセキュリティ更新)
+- 解決日: 2026-09-22
+- 解決内容:
+  maplibre-gl を 5.24.0 → 6.10.0 へ更新(コミット b87a467)。v6はESM/named export専用の
+  ため ShopLocationPicker.tsx の import を「import * as maplibregl」に追随修正(それ以外の
+  地図API使用箇所は無変更)。npm audit で critical 0件を確認。npm run e2e(desktop+mobile
+  14件)2回連続グリーン、実ブラウザで地図描画・座標反映・SSRエラー無しをレビューで確認。
+  moderate 8件(firebase-tools系dev依存)はP-006対象外の既存事象として別途方針検討
