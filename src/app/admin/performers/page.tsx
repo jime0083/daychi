@@ -320,7 +320,10 @@ export default function AdminPerformersPage() {
                         <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">
                           {performer.isMain ? "○" : ""}
                         </td>
-                        <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">
+                        <td
+                          data-testid="performer-order"
+                          className="py-2 pr-4 text-zinc-700 dark:text-zinc-300"
+                        >
                           {performer.order}
                         </td>
                         <td className="py-2 pr-4">

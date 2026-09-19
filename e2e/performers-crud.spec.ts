@@ -42,17 +42,21 @@ test.describe("出演者マスタCRUD(/admin/performers)", () => {
 
     const name = `【E2Eテスト】${uniqueTestId("performer")}`;
     const updatedName = `${name}-更新後`;
+    // 表示順は他フィールド(ランダムID等)のテキストと混同しない値にする。
+    // ロケータ自体をgetByTestId(表示順セル限定)+toHaveText(完全一致)で
+    // 厳密化しているため衝突耐性は既にあるが、値自体も分かりやすく一意な数値にする
+    const order = "917";
 
     // 作成: 名前・メイン出演者フラグ・表示順を入力して作成する
     await page.getByTestId("performer-create-name").fill(name);
     await page.getByTestId("performer-create-ismain").check();
-    await page.getByTestId("performer-create-order").fill("42");
+    await page.getByTestId("performer-create-order").fill(order);
     await page.getByRole("button", { name: "作成" }).click();
 
     // 一覧表示: 作成した出演者が一覧に反映される
     const row = page.getByTestId("performer-row").filter({ hasText: name });
     await expect(row).toBeVisible();
-    await expect(row.getByText("42")).toBeVisible();
+    await expect(row.getByTestId("performer-order")).toHaveText(order);
     await expect(row).toContainText("○");
 
     // 編集: 名前を変更して保存する
