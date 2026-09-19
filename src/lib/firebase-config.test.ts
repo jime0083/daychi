@@ -84,6 +84,26 @@ describe("resolveFirebaseOptions", () => {
     );
     expect(options.projectId).toBe("real-project-id");
   });
+
+  it("Emulator有効かつapiKey未設定のときデモ用apiKeyを補完する(getAuth()のauth/invalid-api-key回避)", () => {
+    const options = resolveFirebaseOptions(makeEnv({ NEXT_PUBLIC_USE_EMULATOR: "true" }));
+    expect(options.apiKey).toBe("demo-emulator-api-key");
+  });
+
+  it("Emulator有効でもapiKeyが設定済みならそれを優先する", () => {
+    const options = resolveFirebaseOptions(
+      makeEnv({
+        NEXT_PUBLIC_USE_EMULATOR: "true",
+        NEXT_PUBLIC_FIREBASE_API_KEY: "real-api-key",
+      }),
+    );
+    expect(options.apiKey).toBe("real-api-key");
+  });
+
+  it("Emulator無効時はapiKey未設定でも補完しない", () => {
+    const options = resolveFirebaseOptions(makeEnv({ NEXT_PUBLIC_USE_EMULATOR: "false" }));
+    expect(options.apiKey).toBeUndefined();
+  });
 });
 
 describe("getEmulatorConnectionConfig", () => {

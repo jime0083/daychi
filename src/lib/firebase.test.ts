@@ -100,6 +100,16 @@ describe("firebase.ts の初期化とEmulator接続切替", () => {
     expect(passedOptions?.projectId).toBe("demo-daychi-coffee-map");
   });
 
+  it("Emulator有効かつapiKey未設定のときデモapiKeyでinitializeAppする(getAuth()のauth/invalid-api-key回避)", async () => {
+    process.env.NEXT_PUBLIC_USE_EMULATOR = "true";
+    delete process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+
+    await import("./firebase");
+
+    const passedOptions = initializeAppMock.mock.calls[0][0] as { apiKey?: string };
+    expect(passedOptions?.apiKey).toBe("demo-emulator-api-key");
+  });
+
   it("既存のFirebase Appがある場合はinitializeAppを再実行せず既存を再利用する", async () => {
     const existingApp = { name: "[DEFAULT]", existing: true };
     getAppsMock.mockReturnValue([existingApp]);
