@@ -23,6 +23,11 @@ const BASE_URL = `http://localhost:${DEV_SERVER_PORT}`;
 // Firebase Emulator UIは、firestore/auth両エミュレータの起動が完了した後にのみ
 // 応答可能になる(手元検証済み)。そのためEmulator起動完了の判定に使う。
 const EMULATOR_UI_URL = "http://127.0.0.1:4000/";
+// scripts/seed.ts の SEED_PROJECT_ID と一致させる固定値(P-010対応)。
+// dev server起動時にこの値を明示することで、Next.jsが自動読込する .env.local に
+// 別のprojectIdが設定されていても、E2Eは常にseedデータと同じEmulator名前空間へ
+// 接続する(webServer.envはprocess.env/.env.localより優先される)。
+const E2E_EMULATOR_PROJECT_ID = "demo-daychi-coffee-map";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -62,6 +67,9 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         NEXT_PUBLIC_USE_EMULATOR: "true",
+        // seedデータと同じEmulator名前空間に固定接続するため明示する(P-010対応)。
+        // .env.local 等の外部設定に本番projectIdが入っていてもこちらが優先される
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: E2E_EMULATOR_PROJECT_ID,
       },
       stdout: "pipe",
       stderr: "pipe",
