@@ -60,11 +60,39 @@
  *   地図の「上」に専用の帯(バー)として配置する(下のJSX参照)。理由は
  *   src/components/map/PerformerFilter.tsxのコメント「レイアウト・重なり回避」を参照
  *   (地図のピンとフィルタパネルの画面座標が重なりクリックを奪い合うリグレッションの対策)。
+ *
+ * タスク3-5で追加したデータフロー(モバイルUI: 画面下部タブで地図/動画一覧を切り替え):
+ * - activeMobileTab("map" | "videos"、初期値"map")を新たに保持する。
+ *   src/components/map/MobileTabBar.tsxの操作でのみ更新される。
+ * - デスクトップ幅(md以上)ではこの状態は表示に影響しない(タブ自体を`md:hidden`で
+ *   非表示にし、レイアウトも常に「左サイドバー+地図」のまま。requirements.md
+ *   「PC表示」を維持する)。
+ * - モバイル幅(md未満)では、地図コンテナとsrc/components/map/MobileVideoList.tsx
+ *   (デスクトップのVideoSidebar相当の内容)を同じ領域に重ねて配置し、activeMobileTabに
+ *   応じてCSSの`hidden`クラスで表示/非表示を切り替える(コンポーネントの
+ *   マウント/アンマウントは行わない)。これは、PublicMap(MapLibre)を
+ *   アンマウント→再マウントすると地図インスタンスの再初期化コスト・状態(中心座標/
+ *   ズーム/fitBounds結果)のリセットが発生するため、タブ切り替えのたびに
+ *   地図を作り直さずに済むようにするための設計判断である。
+ * - モバイルの動画一覧(MobileVideoList)で動画をクリックした場合、デスクトップの
+ *   VideoSidebarクリック時と同じくselectedVideoIdを更新して地図フォーカス・
+ *   ハイライトを反映しつつ、加えてactiveMobileTabを"map"に切り替える
+ *   (handleVideoClick関数)。「動画をタップすると地図タブに切り替わり該当店舗に
+ *   フォーカスする」という動線が、動画一覧を見る目的(店を探す)と地図で確認する目的を
+ *   1操作でつなげる自然な流れになるための設計判断(この関数はデスクトップの
+ *   VideoSidebarのonVideoClickにも同じものを渡すが、デスクトップではタブ自体を
+ *   表示しないためactiveMobileTabの変更は見た目に影響しない)。
+ * - PerformerFilter(出演者フィルタの帯)はタブに関わらず常に表示する(絞り込みは
+ *   地図のピン表示に対する機能のため、動画一覧タブ中でも表示したままにして
+ *   タブ切り替えのたびに出し分けるコストを避ける。実害はない: 動画一覧タブ表示中に
+ *   フィルタを操作しても、地図タブに戻ればその絞り込みが反映された状態で表示される)。
  */
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DetailSheet } from "@/components/map/DetailSheet";
+import { MobileTabBar, type MobileTab } from "@/components/map/MobileTabBar";
+import { MobileVideoList } from "@/components/map/MobileVideoList";
 import { PerformerFilter } from "@/components/map/PerformerFilter";
 import { VideoSidebar } from "@/components/map/VideoSidebar";
 import { resolveShopVisitDetails } from "@/lib/shop-detail";
@@ -104,6 +132,7 @@ export default function Home() {
   const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [selectedPerformerIds, setSelectedPerformerIds] = useState<string[]>([]);
+  const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>("map");
 
   // アンマウント後の setState を防ぐガード(/admin配下の各画面と同じパターン)
   const mountedRef = useRef(true);
@@ -166,6 +195,14 @@ export default function Home() {
     setSelectedShopId(null);
   }
 
+  // 動画一覧(デスクトップのVideoSidebar/モバイルのMobileVideoListの両方で共用)クリック時:
+  // 従来通り地図フォーカス・ハイライトの対象動画を更新しつつ、モバイルでは地図タブに
+  // 切り替える(デスクトップではタブ自体を表示しないため見た目に影響しない)
+  function handleVideoClick(videoId: string): void {
+    setSelectedVideoId(videoId);
+    setActiveMobileTab("map");
+  }
+
   // フィルタ変更で表示対象から外れた店舗の詳細シートが開いたままにならないよう、
   // 変更後の店舗一覧に選択中の店舗が含まれなくなる場合はselectedShopIdもここで閉じる
   // (useEffectでのderiveはsetState-in-effectの警告対象になるため、イベントハンドラ内で完結させる)
@@ -182,35 +219,53 @@ export default function Home() {
   }
 
   return (
-    <main data-testid="public-map-page" className="flex h-dvh w-full overflow-hidden">
+    <main
+      data-testid="public-map-page"
+      className="flex h-dvh w-full flex-col overflow-hidden md:flex-row"
+    >
       <VideoSidebar
         videos={sortedVideos}
         selectedVideoId={selectedVideoId}
-        onVideoClick={setSelectedVideoId}
+        onVideoClick={handleVideoClick}
       />
-      <div className="flex h-full flex-1 flex-col">
+      <div className="flex min-h-0 w-full flex-1 flex-col">
         <PerformerFilter
           performers={performers}
           selectedPerformerIds={selectedPerformerIds}
           onTogglePerformer={togglePerformerId}
         />
-        <div className="relative flex-1">
-          <PublicMap
-            shops={filteredShops}
-            onShopClick={setSelectedShopId}
-            onBackgroundClick={closeDetailSheet}
-            highlightedShopIds={highlightedShopIds}
-          />
-          {loadError !== null && (
-            <p
-              data-testid="public-map-error"
-              className="absolute left-4 top-4 z-10 rounded bg-red-50 px-3 py-2 text-sm text-red-700 shadow dark:bg-red-950 dark:text-red-300"
-            >
-              {loadError}
-            </p>
-          )}
+        <div className="relative min-h-0 flex-1">
+          {/* 地図ビュー: モバイルでは「地図」タブ選択時のみ表示(CSSのhiddenで切り替え、
+              PublicMap自体はアンマウントしない。タスク3-5コメント参照)。デスクトップでは常に表示 */}
+          <div className={`absolute inset-0 ${activeMobileTab === "videos" ? "hidden" : ""} md:block`}>
+            <PublicMap
+              shops={filteredShops}
+              onShopClick={setSelectedShopId}
+              onBackgroundClick={closeDetailSheet}
+              highlightedShopIds={highlightedShopIds}
+            />
+            {loadError !== null && (
+              <p
+                data-testid="public-map-error"
+                className="absolute left-4 top-4 z-10 rounded bg-red-50 px-3 py-2 text-sm text-red-700 shadow dark:bg-red-950 dark:text-red-300"
+              >
+                {loadError}
+              </p>
+            )}
+          </div>
+          {/* モバイル専用の動画一覧ビュー: 「動画一覧」タブ選択時のみ表示。デスクトップでは常に非表示 */}
+          <div
+            className={`absolute inset-0 md:hidden ${activeMobileTab === "videos" ? "" : "hidden"}`}
+          >
+            <MobileVideoList
+              videos={sortedVideos}
+              selectedVideoId={selectedVideoId}
+              onVideoClick={handleVideoClick}
+            />
+          </div>
         </div>
       </div>
+      <MobileTabBar activeTab={activeMobileTab} onSelectTab={setActiveMobileTab} />
       <DetailSheet
         shop={selectedShop}
         visitDetails={selectedShopVisitDetails}
