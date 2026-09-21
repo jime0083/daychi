@@ -57,6 +57,15 @@ Phase 1: 開発基盤 【完了 2026-09-19】
     完了条件: npm run e2e を実行しartifacts生成後の状態で npm run lint がパス(exit 0)。
               src/e2e配下の実コードは引き続きlint対象であること(除外しすぎていないこと)
 
+[x] 1-6a E2EのEmulator projectId明示固定(P-010対応) (2026-09-21 レビューPASS。外部env非依存を確認)
+    内容: playwright.config.ts の dev用webServer env に
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-daychi-coffee-map(seedのSEED_PROJECT_IDと一致)を
+          明示的に設定し、.env.local など外部のprojectId設定に左右されず、E2Eが常にseedと同じ
+          Emulator名前空間に接続するようにする。あわせてEmulator用のapiKey等も必要なら固定。
+          (背景: メインエージェントが作成した.env.localの本番projectIdがE2Eに漏れ21件失敗したP-010)
+    完了条件: .env.local が存在してもしなくても npm run e2e(desktop+mobile)が緑。
+              意図的に.env.localに別projectIdを置いてもE2Eが緑(=外部env非依存)であることを確認
+
 [x] 2-2a performers-crud E2Eのフレーキー修正(P-007対応) (2026-09-22 レビューPASS)
     内容: e2e/performers-crud.spec.ts の表示順アサーション(49・55行目付近の
           row.getByText("42") 等の部分一致)を、厳密なロケータ(getByTestId等で

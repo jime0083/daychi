@@ -282,3 +282,39 @@
   (通常ピンクリック検証テストは pin.click() のまま維持)。コミット c7c34f1。
   --repeat-each=20 で80 passed、npm run e2e(desktop+mobile)2回グリーンを実装・レビュー
   双方で確認。mobile skip解消は本タスク範囲外として見送り(3-2フォローアップに残置)
+
+## P-010: .env.local の本番projectIdがEmulator E2Eに漏れ、seedデータとズレて21件失敗
+- 記録日: 2026-09-21
+- 状態: 解決済み
+- 発生箇所: .env.local(メインエージェントがWork 1完了時に作成)/ playwright.config.ts
+- 問題内容:
+  想定した動き: npm run e2e が Emulator + seedデータで決定的に緑
+  実際の動き: public-map等でpublished店舗ピンが toHaveCount(1) 期待に対し 0 になり
+  desktop/mobile対称で21件失敗
+- 再現手順:
+  1. .env.local に NEXT_PUBLIC_FIREBASE_PROJECT_ID=gen-lang-client-0071017187 がある状態で
+  2. npm run e2e を実行 → seed店舗が表示されず21件失敗
+- 原因調査:
+  - scripts/seed.ts は projectId "demo-daychi-coffee-map" に書き込む(SEED_PROJECT_ID)
+  - firebase-config.ts はフォールバックで demo-daychi-coffee-map を使うが、
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID が設定されていればそちらを優先する
+  - playwright.config.ts の dev webServer は NEXT_PUBLIC_USE_EMULATOR=true は明示するが
+    projectId は明示していないため、Next.jsが自動読込する .env.local の
+    projectId=gen-lang-client-0071017187 が有効になる
+  - 結果、アプリは Emulator 上の "gen-lang-client-0071017187" 名前空間に接続し、
+    seedが書いた "demo-daychi-coffee-map" のデータが見えず0件になる
+  - Phase 3までは .env.local が存在せずフォールバックで demo に一致していたため緑だった。
+    メインエージェントがWork 1完了時に .env.local(本番projectId入り)を作成して壊れた
+- 特定した原因:
+  メインエージェントが .env.local に本番projectIdを入れたこと(直接原因)。加えて、
+  E2Eのdev webServerがEmulator用projectIdを明示固定しておらず .env.local の影響を受ける
+  設計上の脆さ(再発要因)
+- 切り出したタスク: 即時=.env.local削除(本番構成値はapphosting.yamlに保持済みのため冗長)。
+  再発防止=progress.txt タスク1-6a(E2EのEmulator projectId明示固定)
+- 解決日: 2026-09-21
+- 解決内容:
+  即時: メインエージェントが .env.local を削除(本番構成値は apphosting.yaml に保持済み)。
+  再発防止(タスク1-6a): playwright.config.ts の dev webServer env に
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-daychi-coffee-map を明示固定(コミット f55bcd9)。
+  .env.local が無い状態・別projectIdを書いた状態の両方で npm run e2e が68 passedで全緑
+  (外部env非依存)であることを実装・レビュー双方で確認。21件失敗は解消
