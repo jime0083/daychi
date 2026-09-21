@@ -25,6 +25,18 @@ import { createEmulatorTestUser } from "./support/emulator-auth";
  */
 const TEST_PASSWORD = "e2e-test-password-123";
 
+/**
+ * P-009対応: 複数visitテストが動的作成する店舗の緯度経度。
+ * seed店舗(shop-test-published-01: 35.6938, 139.7536。東京都千代田区付近)から
+ * 緯度・経度とも約0.39〜0.45度(約40km超)離れた決定的な固定値にする。
+ * 以前はこの範囲を35.66〜35.71/139.70〜139.75のランダムジッターにしていたが、
+ * このレンジがseed店舗の座標を跨いでおり、稀に画面上でピンが重なりクリックが
+ * intercept/タイムアウトしていた(problem.txt P-009参照)。ランダム性を排除し、
+ * 常にこの値を使う
+ */
+const DYNAMIC_SHOP_LAT = "35.300000";
+const DYNAMIC_SHOP_LNG = "139.300000";
+
 async function blockMapTiles(page: Page): Promise<void> {
   await page.route("**/tiles.openfreemap.org/**", async (route) => {
     await route.abort();
@@ -62,6 +74,13 @@ async function openDetailSheetForPublishedShop(page: Page): Promise<void> {
  * 公開ページ(/)で、指定した名前(aria-label。PublicMap.tsxがshop.nameを設定する)の
  * ピンをクリックして詳細シートを開く。管理画面から作成したばかりの店舗はFirestoreの
  * 自動採番ID(data-shop-id)を事前に知りえないため、一意な店名(aria-label)で特定する。
+ *
+ * P-009対応: ピンの座標はDYNAMIC_SHOP_LAT/LNGでseed店舗と重ならないようにしているが、
+ * それでもこのテスト自身が--repeat-each等で並行再実行された場合(同じ固定座標のピンが
+ * 複数同時に存在しうる)にPlaywrightの座標ヒットテストが意図しない要素をクリック対象と
+ * 判定するリスクをゼロにするため、aria-labelで一意に特定したDOM要素へ直接.click()を
+ * 発火させる(座標のヒットテスト/pointer-events判定を経由しない)。
+ * e2e/mobile-ui.spec.ts の clickBypassingDevOverlay() と同じ方針
  */
 async function openDetailSheetByShopName(page: Page, shopName: string): Promise<void> {
   await blockMapTiles(page);
@@ -70,7 +89,10 @@ async function openDetailSheetByShopName(page: Page, shopName: string): Promise<
 
   const pin = page.locator(`[data-testid="map-pin"][aria-label="${shopName}"]`);
   await expect(pin).toHaveCount(1);
-  await pin.click();
+  await expect(pin).toBeVisible();
+  await pin.evaluate((element) => {
+    (element as HTMLElement).click();
+  });
 }
 
 test.describe("スライドアップ詳細シート", () => {
@@ -188,11 +210,9 @@ test.describe("スライドアップ詳細シート", () => {
 
     const testId = uniqueTestId("e2e-detail-sheet");
     const shopName = `【E2Eテスト】詳細シート複数訪問店 ${testId}`;
-    // desktop/mobileプロジェクトがこのspec fileを並行実行するため、座標を毎回
-    // わずかにランダムジッターさせ、ピンのDOM要素が同じ画面位置に重なって
-    // クリックを奪い合わない(pointer-events intercepted)ようにする
-    const lat = (35.66 + Math.random() * 0.05).toFixed(6);
-    const lng = (139.7 + Math.random() * 0.05).toFixed(6);
+    // P-009対応: 座標はDYNAMIC_SHOP_LAT/LNG(seed店舗と重ならない決定的な固定値)を使う
+    const lat = DYNAMIC_SHOP_LAT;
+    const lng = DYNAMIC_SHOP_LNG;
 
     // 店舗作成→公開
     await page.getByRole("link", { name: "店舗" }).click();
