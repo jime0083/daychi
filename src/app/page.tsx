@@ -38,13 +38,31 @@
  * - selectedVideoIdからsrc/lib/video-shop.tsのresolveVideoShopIds()で
  *   「その動画で紹介されたpublished visitのshopId群」を算出し、
  *   PublicMapのhighlightedShopIdsに渡す(ピンのハイライト表示 + 地図フォーカスの両方に使う)。
+ *
+ * タスク3-4で追加したデータフロー(出演者フィルタ):
+ * - selectedPerformerIds(選択中の出演者ID一覧、複数選択可)を新たに保持する。
+ *   PerformerFilter(isMain=falseの出演者のみ選択肢に表示。詳細な設計判断は
+ *   src/components/map/PerformerFilter.tsxのコメント参照)のトグル操作で更新する。
+ * - src/lib/shop-filter.tsのfilterShopsByPerformers()で、選択出演者のいずれかが
+ *   参加したpublished visitを持つ店舗のみに絞り込んだfilteredShopsを算出し、
+ *   PublicMapのshopsにはこのfilteredShopsを渡す(選択0件時は絞り込みなし=全件)。
+ * - 整合性: フィルタで絞り込まれて表示されなくなった店舗の詳細シートが開いたままに
+ *   ならないよう、togglePerformerId内でフィルタ変更後の店舗一覧を計算し、選択中の店舗が
+ *   その中に含まれなくなる場合はselectedShopIdもその場でnullに戻す(setState-in-effectを
+ *   避けるため、deriveはuseEffectではなくイベントハンドラ内で完結させる設計とした)。
+ *   サイドバーの動画一覧・ハイライト(highlightedShopIds)は出演者フィルタの影響を
+ *   受けない(仕様上、絞り込み対象は地図のピン表示のみのため)。フィルタで非表示になった
+ *   店舗はそもそも地図上にピン(Marker)が生成されないため、ハイライト対象に
+ *   含まれていても実害はない(PublicMap.tsx参照)。
  */
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DetailSheet } from "@/components/map/DetailSheet";
+import { PerformerFilter } from "@/components/map/PerformerFilter";
 import { VideoSidebar } from "@/components/map/VideoSidebar";
 import { resolveShopVisitDetails } from "@/lib/shop-detail";
+import { filterShopsByPerformers } from "@/lib/shop-filter";
 import { resolveVideoShopIds } from "@/lib/video-shop";
 import { listPerformers } from "@/repositories/performers";
 import { listPublishedShops } from "@/repositories/shops";
@@ -79,6 +97,7 @@ export default function Home() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+  const [selectedPerformerIds, setSelectedPerformerIds] = useState<string[]>([]);
 
   // アンマウント後の setState を防ぐガード(/admin配下の各画面と同じパターン)
   const mountedRef = useRef(true);
@@ -107,6 +126,13 @@ export default function Home() {
       });
   }, []);
 
+  // 出演者フィルタ(タスク3-4)で選択された出演者のいずれかが参加した
+  // published visitを持つ店舗のみに絞り込む(選択0件の場合は絞り込みなし=shopsそのまま)
+  const filteredShops = useMemo(
+    () => filterShopsByPerformers(shops, visits, selectedPerformerIds),
+    [shops, visits, selectedPerformerIds],
+  );
+
   const selectedShop = useMemo(
     () => shops.find((shop) => shop.id === selectedShopId) ?? null,
     [shops, selectedShopId],
@@ -134,6 +160,21 @@ export default function Home() {
     setSelectedShopId(null);
   }
 
+  // フィルタ変更で表示対象から外れた店舗の詳細シートが開いたままにならないよう、
+  // 変更後の店舗一覧に選択中の店舗が含まれなくなる場合はselectedShopIdもここで閉じる
+  // (useEffectでのderiveはsetState-in-effectの警告対象になるため、イベントハンドラ内で完結させる)
+  function togglePerformerId(performerId: string): void {
+    const nextPerformerIds = selectedPerformerIds.includes(performerId)
+      ? selectedPerformerIds.filter((id) => id !== performerId)
+      : [...selectedPerformerIds, performerId];
+    setSelectedPerformerIds(nextPerformerIds);
+
+    const nextFilteredShops = filterShopsByPerformers(shops, visits, nextPerformerIds);
+    if (selectedShopId !== null && !nextFilteredShops.some((shop) => shop.id === selectedShopId)) {
+      setSelectedShopId(null);
+    }
+  }
+
   return (
     <main data-testid="public-map-page" className="flex h-dvh w-full overflow-hidden">
       <VideoSidebar
@@ -143,10 +184,15 @@ export default function Home() {
       />
       <div className="relative h-full flex-1">
         <PublicMap
-          shops={shops}
+          shops={filteredShops}
           onShopClick={setSelectedShopId}
           onBackgroundClick={closeDetailSheet}
           highlightedShopIds={highlightedShopIds}
+        />
+        <PerformerFilter
+          performers={performers}
+          selectedPerformerIds={selectedPerformerIds}
+          onTogglePerformer={togglePerformerId}
         />
         {loadError !== null && (
           <p
