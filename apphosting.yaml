@@ -1,0 +1,68 @@
+# Firebase App Hosting 設定ファイル
+# https://firebase.google.com/docs/app-hosting/configure
+#
+# タスク2-8: 初回デプロイに向けたコード側の設定。
+# 実際のバックエンド作成・GitHub連携(manual-work W3)、デプロイ実行は別途手動/CLIで行う。
+#
+# NOTE: NEXT_PUBLIC_SITE_URL は本番URLがバックエンド作成後に確定するため、
+# 現時点では設定していない。バックエンドURL確定後に NEXT_PUBLIC_SITE_URL を
+# 環境変数として追加すると、metadata/OGPの絶対URL(og:image等)が正しく生成される。
+
+# ランタイム設定: 個人利用規模のためコスト最小化を優先し、
+# アイドル時のインスタンス数を0にする(常時起動コストをかけない)
+runConfig:
+  minInstances: 0
+  maxInstances: 1
+
+# 環境変数: Firebase Web SDKの構成値(公開前提のWeb構成値のため value に直接記載してよい。
+# シークレット管理(Secret Manager参照)は不要)
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyAcI775K4eN5oTeYeiMhLoE84NeRgYq1Oc
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: gen-lang-client-0071017187.firebaseapp.com
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: gen-lang-client-0071017187
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: gen-lang-client-0071017187.firebasestorage.app
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "1078895002041"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:1078895002041:web:430f5d6ff34e768f22f668"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+    value: G-06YR16RTVT
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # 本番は実Firebaseに接続する(絶対に true にしない。true にするとEmulatorへの
+  # 接続を試み本番で機能しなくなる)
+  - variable: NEXT_PUBLIC_USE_EMULATOR
+    value: "false"
+    availability:
+      - BUILD
+      - RUNTIME

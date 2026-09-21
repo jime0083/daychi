@@ -52,3 +52,8 @@ next-env.d.ts
 # Firebase Emulator Suite
 .firebase/
 *-debug.log
+
+# サービスアカウントキー(scripts/set-admin-claim.ts用。絶対にコミットしない)
+sa-key.json
+*-service-account*.json
+serviceAccountKey.json
