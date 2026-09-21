@@ -8,7 +8,11 @@
 =====================================
 Work 1: Firebaseプロジェクト作成
 =====================================
-[ ] 状態: 未着手
+[x] 状態: 完了(2026-09-21)
+     - 既存プロジェクト(AI Studio系)を復元・流用。表示名 daychi-coffee-map / 実ID gen-lang-client-0071017187
+       (アカウントのプロジェクト作成上限のため新規作成でなく復元・流用で対応)
+     - Blaze / Firestore(asia-northeast1でない可能性あり=作成時のロケーションで確定)/ Google認証 有効化済み
+     - Web構成値を取得し .env.local(gitignore対象・非コミット)に保存済み。projectId=gen-lang-client-0071017187
 内容:
   1. https://console.firebase.google.com で新規プロジェクト作成(例: daychi-coffee-map)
   2. Blazeプラン(従量課金)へアップグレード ※App Hostingに必須。この規模なら実質ほぼ0円
