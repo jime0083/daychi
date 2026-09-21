@@ -21,10 +21,29 @@
  * - データ取得・絞り込み計算は行わない制御コンポーネント(PublicMap/VideoSidebarと
  *   同じ方針)。選択状態(selectedPerformerIds)とトグルコールバックは呼び出し側
  *   (src/app/page.tsx)が管理する。
- * - 地図の邪魔にならないよう、地図コンテナ右上に浮かせるオーバーレイパネルとして配置する
- *   (呼び出し側で src/components/map/PublicMap.tsx と同じ relative コンテナ内に置く想定)。
- *   本格的なモバイル最適化はタスク3-5で行うため、ここでは幅が画面からはみ出さない程度の
- *   最低限の配慮(max-width指定・折り返し)にとどめる。
+ *
+ * レイアウト・重なり回避(problem修正: 2026-09-21 daychi-review FAIL対応):
+ * - 当初は地図コンテナ内に absolute right-4 top-4 で浮かせるオーバーレイパネルとして
+ *   実装していたが、地図のfitBounds結果次第でピン(maplibregl.Marker)がこのパネルの
+ *   画面座標と重なり、ピンのクリックをパネルに奪われる(pointer-events intercepted)
+ *   リグレッションがdetail-sheet.spec.tsで間欠的に再現した。原因は、パネルが地図
+ *   コンテナの「内側」に絶対配置されており、地図(PublicMap)が管理する描画領域と
+ *   画面座標空間を共有してしまうこと。
+ * - そのため、地図の「上」に専用の帯(バー)としてレイアウトする方式に変更した
+ *   (呼び出し側 src/app/page.tsx で、このコンポーネントと地図を縦のflexboxで
+ *   並べ、地図はこのバーの残り高さいっぱいに配置する)。これによりピンが実際に
+ *   描画されうる領域(地図コンテナのクライアント矩形)からこのバーの領域が完全に
+ *   排除されるため、fitBoundsの結果や並行実行中の他テストが投入するデータに
+ *   依存せず、ピンとこのバーが画面上で重なることは構造的に起こり得ない。
+ * - このバー自体はpointer-events-noneとし、実際に操作可能な出演者一覧(ul要素)
+ *   のみpointer-events-autoで復元する。これにより、バーの背景・見出しテキスト部分は
+ *   クリックを透過し(下にある詳細シートのオーバーレイ等の操作を妨げない)、
+ *   チェックボックス自体は引き続きクリックできる。
+ * - z-indexはDetailSheetのオーバーレイ(fixed inset-0, z-40)より高い値(z-60)とする。
+ *   詳細シートを開いた状態でもこのバーの出演者チェックボックスを操作可能にするため
+ *   (「フィルタで店舗が消えたら詳細シートを自動クローズ」というsrc/app/page.tsxの
+ *   togglePerformerId実装に、通常のUI操作から到達できるようにするための対応。
+ *   e2e/performer-filter.spec.tsで検証する)。
  */
 import type { Performer } from "@/types/performer";
 
@@ -58,12 +77,15 @@ export function PerformerFilter({
   return (
     <div
       data-testid={PERFORMER_FILTER_TEST_ID}
-      className="absolute right-4 top-4 z-20 flex max-w-[calc(100%-2rem)] flex-col gap-1.5 rounded-lg bg-white/95 p-3 text-sm shadow dark:bg-zinc-950/95"
+      // pointer-events-none: バー自体(背景・パディング・見出しテキスト)はクリックを
+      // 透過させる(上のコメント「レイアウト・重なり回避」参照)。実際に操作が必要な
+      // ulにのみ pointer-events-auto で復元する
+      className="relative z-[60] flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-zinc-200 bg-white/95 px-4 py-2 text-sm pointer-events-none dark:border-zinc-800 dark:bg-zinc-950/95"
     >
       <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
         出演者で絞り込み
       </span>
-      <ul className="flex flex-wrap gap-x-3 gap-y-1">
+      <ul className="flex flex-wrap gap-x-3 gap-y-1 pointer-events-auto">
         {filterablePerformers.map((performer) => {
           const isSelected = selectedPerformerIds.includes(performer.id);
           return (

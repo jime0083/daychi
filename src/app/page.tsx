@@ -53,7 +53,13 @@
  *   サイドバーの動画一覧・ハイライト(highlightedShopIds)は出演者フィルタの影響を
  *   受けない(仕様上、絞り込み対象は地図のピン表示のみのため)。フィルタで非表示になった
  *   店舗はそもそも地図上にピン(Marker)が生成されないため、ハイライト対象に
- *   含まれていても実害はない(PublicMap.tsx参照)。
+ *   含まれていても実害はない(PublicMap.tsx参照)。この自動クローズはe2e/performer-filter.spec.ts
+ *   で検証する(詳細シートを開いた状態でPerformerFilterのチェックボックスを操作し、
+ *   シートが閉じることを確認する)。
+ * - レイアウト: PerformerFilterは地図コンテナの「内側」に浮かせるオーバーレイではなく、
+ *   地図の「上」に専用の帯(バー)として配置する(下のJSX参照)。理由は
+ *   src/components/map/PerformerFilter.tsxのコメント「レイアウト・重なり回避」を参照
+ *   (地図のピンとフィルタパネルの画面座標が重なりクリックを奪い合うリグレッションの対策)。
  */
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -182,26 +188,28 @@ export default function Home() {
         selectedVideoId={selectedVideoId}
         onVideoClick={setSelectedVideoId}
       />
-      <div className="relative h-full flex-1">
-        <PublicMap
-          shops={filteredShops}
-          onShopClick={setSelectedShopId}
-          onBackgroundClick={closeDetailSheet}
-          highlightedShopIds={highlightedShopIds}
-        />
+      <div className="flex h-full flex-1 flex-col">
         <PerformerFilter
           performers={performers}
           selectedPerformerIds={selectedPerformerIds}
           onTogglePerformer={togglePerformerId}
         />
-        {loadError !== null && (
-          <p
-            data-testid="public-map-error"
-            className="absolute left-4 top-4 z-10 rounded bg-red-50 px-3 py-2 text-sm text-red-700 shadow dark:bg-red-950 dark:text-red-300"
-          >
-            {loadError}
-          </p>
-        )}
+        <div className="relative flex-1">
+          <PublicMap
+            shops={filteredShops}
+            onShopClick={setSelectedShopId}
+            onBackgroundClick={closeDetailSheet}
+            highlightedShopIds={highlightedShopIds}
+          />
+          {loadError !== null && (
+            <p
+              data-testid="public-map-error"
+              className="absolute left-4 top-4 z-10 rounded bg-red-50 px-3 py-2 text-sm text-red-700 shadow dark:bg-red-950 dark:text-red-300"
+            >
+              {loadError}
+            </p>
+          )}
+        </div>
       </div>
       <DetailSheet
         shop={selectedShop}
