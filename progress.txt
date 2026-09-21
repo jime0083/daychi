@@ -151,7 +151,7 @@ Phase 3: 公開ページ
       Emulator直接書き込み(seed方式)で用意しmobileのskipを解消することを推奨(タスク3-5の
       モバイルUI対応時に合わせて検討可)
 
-[ ] 3-2b detail-sheet複数visitテストの座標決定化(P-009対応)
+[x] 3-2b detail-sheet複数visitテストの座標決定化(P-009対応) (2026-09-20 レビューPASS。--repeat-each=20で80 passed)
     内容: e2e/detail-sheet.spec.ts の複数visitテストで、動的作成する店舗の座標をseed店舗
           (shop-test-published-01)のピンと画面上で重ならない決定的な遠隔座標にする
           (ジッターによる非決定性を排除)。あわせて、テストデータ準備を管理画面CRUD UIから

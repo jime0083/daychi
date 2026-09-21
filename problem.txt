@@ -256,7 +256,7 @@
 
 ## P-009: detail-sheet.spec.ts が動的作成店舗とseed店舗のピン座標重なりで間欠失敗
 - 記録日: 2026-09-20
-- 状態: 修正中
+- 状態: 解決済み
 - 発生箇所: e2e/detail-sheet.spec.ts:150 付近(タスク3-2由来。タスク3-5のレビュー中に発覚)
 - 問題内容:
   想定した動き: detail-sheet の複数visitテストが決定的に(毎回)通る
@@ -274,5 +274,11 @@
   テストデータの店舗座標が非決定的(ジッター)で、seed店舗ピンと画面上で重なりうること。
   テストの座標設計の堅牢性不足(本番コードの欠陥ではない)
 - 切り出したタスク: progress.txt タスク3-2b(detail-sheet 複数visitテストの座標決定化)
-- 解決日:
+- 解決日: 2026-09-20
 - 解決内容:
+  detail-sheet.spec.ts の動的作成店舗座標をランダムジッターから決定的な遠隔固定値
+  (35.300000, 139.300000。seed店舗から40km超)に変更。加えて複数visitテスト専用の
+  openDetailSheetByShopName() のクリックを evaluate(element.click())方式に堅牢化
+  (通常ピンクリック検証テストは pin.click() のまま維持)。コミット c7c34f1。
+  --repeat-each=20 で80 passed、npm run e2e(desktop+mobile)2回グリーンを実装・レビュー
+  双方で確認。mobile skip解消は本タスク範囲外として見送り(3-2フォローアップに残置)
