@@ -110,6 +110,22 @@ Phase 2: 管理画面
           緯度経度を確定するUI
     完了条件: E2E合格(フォーム入力+地図クリック/ドラッグで座標が保存される)
 
+[x] 2-4c 住所ジオコーディングによるピン配置(P-011対応) (2026-09-22 レビューPASS)
+    内容: /admin/shops で「住所からピンを立てる」ボタンを追加。住所を入力してボタンを押すと
+          サーバー側ルート /api/admin/geocode(管理者トークン認証。oembedと同じ認可パターン)が
+          Nominatim(https://nominatim.openstreetmap.org/search、キー不要・User-Agent必須・
+          accept-language=ja)で座標を取得し、地図にピンを配置する。ずれは地図ドラッグで微調整。
+          **緯度経度の数値入力欄はUIから撤去**(内部stateとFirestore保存は緯度経度のまま)。
+          ジオコード失敗(結果0件)時は分かりやすいエラー表示。
+          ※数値入力欄撤去に伴い、店舗を作成する既存E2E(shops-crud、detail-sheetの複数visit、
+            その他店舗作成を伴うもの)を「ジオコードボタン(page.routeでモック)」経由に更新する。
+            特に detail-sheet複数visitテストのP-009対応(seed店舗と重ならない決定的な遠隔座標
+            35.300000/139.300000)は、geocodeモックがその座標を返す形で維持すること
+    完了条件: E2E合格(住所入力→ボタン→ピン配置→保存→一覧/編集/削除)。geocodeは実ネットワーク
+              非依存(モック)。/api/admin/geocode が未認証を拒否(401/403)。緯度経度数値入力欄が
+              UIに無いこと。detail-sheet --repeat-each=20 desktop が安定pass(P-009維持)。
+              npm run typecheck / lint / test / e2e(desktop+mobile)全てグリーン
+
 [x] 2-5 訪問(Visit)登録CRUD (2026-09-22 レビューPASS。出演者重複は許容と決定・仕様書に明記)
     内容: /admin/visits 一覧・作成・編集・削除。店舗と動画をセレクトで紐付け、
           出演者ごとの飲食メニュー(複数品目)を動的フォームで入力
