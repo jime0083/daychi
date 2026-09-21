@@ -34,7 +34,13 @@ Work 2: 管理者Googleアカウントの決定
 =====================================
 Work 10: サービスアカウントキー取得と管理者クレーム付与(本番)
 =====================================
-[ ] 状態: 未着手
+[x] 状態: 完了(2026-09-22)
+     - sa-key.json(サービスアカウント秘密鍵、gitignore済み)を配置
+     - 承認済みドメインに hosted.app のURLを追加、本番/adminで一度ログインしAuthユーザー作成
+     - set-admin-claim.ts 実行で akito14140099@gmail.com に admin クレーム付与
+       (uid=Lkauhl2TvsULZC2nr5T0jztAzAD3)
+     - Firestoreルールも本番反映済み(firebase deploy --only firestore:rules)
+     - 残: 再ログインでクレーム反映確認 / セキュリティのため sa-key.json は使用後削除推奨
 内容:
   本番環境で管理者アカウントに admin クレームを付与するための作業:
   1. Firebaseコンソール > プロジェクト設定 > サービスアカウント で
