@@ -176,8 +176,17 @@ Phase 3: 公開ページ
           詳細シート・フィルタのモバイル最適化
     完了条件: E2E合格(モバイルビューポートでタブ切替・ピン→シート表示が動作)
 
-[ ] 3-6 メタ情報と公開デプロイ
-    内容: タイトル「Daychi COFFEE MAP」、OGP、faviconの設定。本番デプロイ
+[ ] 3-6 メタ情報設定(タイトル/OGP/favicon)
+    ※2026-09-20 分割: 本番デプロイ部分は W1/W3 未着手のため 2-8 とまとめて後日実施。
+      本タスクはローカルで検証可能なメタ情報設定のみを対象とする
+    内容: タイトル「Daychi COFFEE MAP」、メタディスクリプション、OGP(og:title/description/
+          type/image等)、faviconの設定。src/app/layout.tsx の metadata 等で設定
+    完了条件: E2E/HTMLでメタ情報(title/OGP/favicon)が正しく出力されることを確認。
+              npm run typecheck / lint / test / e2e(desktop+mobile)全てグリーン
+
+[ ] 3-6b 公開ページ本番デプロイ確認(2-8デプロイ後に実施)
+    ※開始前確認: manual-work W1/W3(+実データ確認は W4)完了必須。2-8完了が前提
+    内容: 2-8で本番デプロイ後、公開トップページ(地図)が本番URLで表示されることを確認
     完了条件: 本番URLで公開ページが表示される(daychi-reviewのスモークE2E)。
               ※実データ表示確認には manual-work W4(実データ登録)完了が必要
 
