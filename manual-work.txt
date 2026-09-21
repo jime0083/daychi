@@ -48,7 +48,11 @@ Work 10: サービスアカウントキー取得と管理者クレーム付与(�
 =====================================
 Work 3: GitHubリポジトリ作成とApp Hosting接続
 =====================================
-[ ] 状態: 未着手
+[x] 状態: 完了(2026-09-21 App Hostingバックエンド作成・GitHub接続済み)
+     - リポジトリ: github.com/jime0083/daychi(master、push済み)
+     - バックエンド名: daychi-coffee-map / リージョン: asia-east1
+     - 公開URL: https://daychi-coffee-map--gen-lang-client-0071017187.asia-east1.hosted.app
+     - 初回ロールアウト: masterのコミット873a4a1からビルド開始(結果は要確認)
 内容:
   1. GitHubに新規リポジトリを作成(例: daychi-coffee-map)※リポジトリ作成はClaudeが
      gh CLIで代行可能。その場合このWorkは接続作業のみ
