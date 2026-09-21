@@ -3,21 +3,24 @@ import { expect, test, type Page } from "@playwright/test";
 import { uniqueTestId } from "@/repositories/test-support";
 
 import { createEmulatorTestUser } from "./support/emulator-auth";
+import { mockGeocode } from "./support/geocode-mock";
 
 /**
  * タスク2-4(店舗登録CRUD・地図ピン位置指定)のE2Eテスト。
+ * タスク2-4c(problem.txt P-011対応)で緯度経度の数値入力欄を撤去し、
+ * 「住所からピンを立てる」ボタン(/api/admin/geocode)経由の座標指定に変更。
  *
  * requirements.md「3.2 管理画面」「4. データモデル」shops に基づき、
- * /admin/shops での「フォーム入力(店名・住所・営業時間・情報基準日・座標)→
- * 保存→一覧表示→編集→削除」の一連操作を検証する。
+ * /admin/shops での「フォーム入力(店名・住所・営業時間・情報基準日)→
+ * 住所からピンを立てる→保存→一覧表示→編集→削除」の一連操作を検証する。
  *
  * 地図タイル(MapLibre GL + OpenFreeMap)は外部ネットワーク依存であり、
  * E2Eの決定性・速度に影響するため tiles.openfreemap.org へのリクエストは
- * すべてブロックする。緯度経度の確定はアプリ側の設計上、地図クリック/ドラッグに
- * 依存せず数値入力欄(shop-create-lat / shop-create-lng 等)でも行えるため、
- * 本テストでは数値入力欄側で座標を設定して検証する(地図はUI補助という位置づけ。
+ * すべてブロックする。座標の確定はアプリ側の設計上、地図クリック/ドラッグにも
+ * 依存できるが、本テストでは/api/admin/geocodeをモックして(e2e/support/
+ * geocode-mock.ts)決定的に座標を設定する(地図はUI補助という位置づけ。
  * src/components/admin/ShopLocationPicker.tsx のコメント参照)。これにより
- * 地図が原因でテストがflakyになることを避ける。
+ * 地図・外部ジオコーディングAPIが原因でテストがflakyになることを避ける。
  *
  * ログイン方式・一意ID生成方式は e2e/videos-crud.spec.ts と同様。
  */
@@ -48,18 +51,28 @@ test.describe("店舗登録CRUD(/admin/shops)", () => {
     const name = `【E2Eテスト】${shopId}`;
     const updatedName = `${name}-更新後`;
     const address = "東京都渋谷区道玄坂1-2-3";
+    const updatedAddress = "愛知県名古屋市中村区名駅1-1-1";
     const businessHours = "8:00-18:00(月曜定休)";
+
+    // ジオコード結果は住所文字列ごとに決定的な座標を返すようモックする
+    // (実際のNominatimへのネットワークアクセスには依存しない)
+    await mockGeocode(page, {
+      [address]: { lat: 35.658034, lng: 139.701636 },
+      [updatedAddress]: { lat: 35.17, lng: 136.8816 },
+    });
 
     await page.getByRole("link", { name: "店舗" }).click();
     await expect(page.getByRole("heading", { name: "店舗マスタ" })).toBeVisible();
 
-    // フォーム入力: 店名・住所・営業時間・情報基準日・座標(数値入力欄)
+    // フォーム入力: 店名・住所・営業時間・情報基準日→「住所からピンを立てる」で座標を取得
     await page.getByTestId("shop-create-name").fill(name);
     await page.getByTestId("shop-create-address").fill(address);
     await page.getByTestId("shop-create-businesshours").fill(businessHours);
     await page.getByTestId("shop-create-infoasof").fill("2026-05-01");
-    await page.getByTestId("shop-create-lat").fill("35.658034");
-    await page.getByTestId("shop-create-lng").fill("139.701636");
+    await page.getByTestId("shop-create-geocode").click();
+    await expect(page.getByTestId("shop-create-location-preview")).toContainText(
+      "35.658034, 139.701636",
+    );
     await page.getByRole("button", { name: "作成" }).click();
 
     // 一覧表示: 入力した項目・座標が反映される(ステータスはdraftデフォルト=下書き)
@@ -73,11 +86,15 @@ test.describe("店舗登録CRUD(/admin/shops)", () => {
     // タスク2-7: 作成成功時に一時的な成功メッセージが表示される
     await expect(page.getByTestId("shop-success")).toContainText("店舗を作成しました");
 
-    // 編集: 店名と座標を変更して保存する(タスク2-7: 成功メッセージも表示される)
+    // 編集: 店名・住所を変更し「住所からピンを立てる」で座標を再取得して保存する
+    // (タスク2-7: 成功メッセージも表示される)
     await row.getByRole("button", { name: "編集" }).click();
     await page.getByTestId("shop-edit-name").fill(updatedName);
-    await page.getByTestId("shop-edit-lat").fill("35.170000");
-    await page.getByTestId("shop-edit-lng").fill("136.881600");
+    await page.getByTestId("shop-edit-address").fill(updatedAddress);
+    await page.getByTestId("shop-edit-geocode").click();
+    await expect(page.getByTestId("shop-edit-location-preview")).toContainText(
+      "35.170000, 136.881600",
+    );
     await page.getByRole("button", { name: "保存" }).click();
 
     const updatedRow = page.getByTestId("shop-row").filter({ hasText: updatedName });
@@ -104,7 +121,7 @@ test.describe("店舗登録CRUD(/admin/shops)", () => {
     await page.getByRole("link", { name: "店舗" }).click();
     await expect(page.getByRole("heading", { name: "店舗マスタ" })).toBeVisible();
 
-    // 店名・住所・情報基準日を未入力のまま作成する(緯度経度はデフォルト値が入っている)
+    // 店名・住所・情報基準日を未入力のまま作成する(座標は内部stateのデフォルト値が使われる)
     await page.getByRole("button", { name: "作成" }).click();
 
     const errorList = page.getByTestId("shop-create-error");
@@ -145,5 +162,28 @@ test.describe("店舗登録CRUD(/admin/shops)", () => {
     await row.getByRole("button", { name: "削除" }).click();
     await page.getByTestId("shop-delete-confirm-confirm").click();
     await expect(page.getByTestId("shop-row").filter({ hasText: name })).toHaveCount(0);
+  });
+
+  test("ジオコード結果が0件の場合は分かりやすいエラーが表示される(タスク2-4c)", async ({
+    page,
+  }) => {
+    await page.route("**/tiles.openfreemap.org/**", async (route) => {
+      await route.abort();
+    });
+
+    await loginAsAdmin(page);
+
+    // 何も登録していない住所文字列はmockGeocode側で404(見つからない)として扱われる
+    await mockGeocode(page, {});
+
+    await page.getByRole("link", { name: "店舗" }).click();
+    await expect(page.getByRole("heading", { name: "店舗マスタ" })).toBeVisible();
+
+    await page.getByTestId("shop-create-address").fill("存在しない架空の住所12345");
+    await page.getByTestId("shop-create-geocode").click();
+
+    await expect(page.getByTestId("shop-create-geocode-error")).toContainText(
+      "住所から座標が見つかりませんでした",
+    );
   });
 });

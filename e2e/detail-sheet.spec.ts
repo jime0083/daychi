@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { uniqueTestId } from "@/repositories/test-support";
 
 import { createEmulatorTestUser } from "./support/emulator-auth";
+import { mockGeocode } from "./support/geocode-mock";
 
 /**
  * タスク3-2(スライドアップ詳細シート)のE2Eテスト。
@@ -32,7 +33,10 @@ const TEST_PASSWORD = "e2e-test-password-123";
  * 以前はこの範囲を35.66〜35.71/139.70〜139.75のランダムジッターにしていたが、
  * このレンジがseed店舗の座標を跨いでおり、稀に画面上でピンが重なりクリックが
  * intercept/タイムアウトしていた(problem.txt P-009参照)。ランダム性を排除し、
- * 常にこの値を使う
+ * 常にこの値を使う。
+ * タスク2-4c(P-011対応)で座標指定が数値入力欄から「住所からピンを立てる」
+ * ボタン(/api/admin/geocode)経由に変わったため、この固定値は
+ * e2e/support/geocode-mock.ts でモックする戻り値として利用する
  */
 const DYNAMIC_SHOP_LAT = "35.300000";
 const DYNAMIC_SHOP_LNG = "139.300000";
@@ -210,19 +214,25 @@ test.describe("スライドアップ詳細シート", () => {
 
     const testId = uniqueTestId("e2e-detail-sheet");
     const shopName = `【E2Eテスト】詳細シート複数訪問店 ${testId}`;
-    // P-009対応: 座標はDYNAMIC_SHOP_LAT/LNG(seed店舗と重ならない決定的な固定値)を使う
-    const lat = DYNAMIC_SHOP_LAT;
-    const lng = DYNAMIC_SHOP_LNG;
+    const shopAddress = "東京都渋谷区テスト9-9-9";
+    // P-009対応: 座標はDYNAMIC_SHOP_LAT/LNG(seed店舗と重ならない決定的な固定値)を使う。
+    // タスク2-4cで座標指定が「住所からピンを立てる」ボタン経由になったため、
+    // /api/admin/geocodeをモックしてこの住所がDYNAMIC_SHOP_LAT/LNGを返すようにする
+    await mockGeocode(page, {
+      [shopAddress]: { lat: Number(DYNAMIC_SHOP_LAT), lng: Number(DYNAMIC_SHOP_LNG) },
+    });
 
     // 店舗作成→公開
     await page.getByRole("link", { name: "店舗" }).click();
     await expect(page.getByRole("heading", { name: "店舗マスタ" })).toBeVisible();
     await page.getByTestId("shop-create-name").fill(shopName);
-    await page.getByTestId("shop-create-address").fill("東京都渋谷区テスト9-9-9");
+    await page.getByTestId("shop-create-address").fill(shopAddress);
     await page.getByTestId("shop-create-businesshours").fill("10:00-19:00(テストデータ)");
     await page.getByTestId("shop-create-infoasof").fill("2026-06-01");
-    await page.getByTestId("shop-create-lat").fill(lat);
-    await page.getByTestId("shop-create-lng").fill(lng);
+    await page.getByTestId("shop-create-geocode").click();
+    await expect(page.getByTestId("shop-create-location-preview")).toContainText(
+      `${DYNAMIC_SHOP_LAT}, ${DYNAMIC_SHOP_LNG}`,
+    );
     await page.getByRole("button", { name: "作成" }).click();
     const shopRow = page.getByTestId("shop-row").filter({ hasText: shopName });
     await expect(shopRow).toBeVisible();

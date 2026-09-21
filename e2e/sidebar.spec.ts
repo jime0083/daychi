@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { uniqueTestId } from "@/repositories/test-support";
 
 import { createEmulatorTestUser } from "./support/emulator-auth";
+import { mockGeocode } from "./support/geocode-mock";
 
 /**
  * タスク3-3(サイドバー動画一覧)のE2Eテスト。
@@ -99,27 +100,38 @@ test.describe("サイドバー動画一覧", () => {
     const testId = uniqueTestId("e2e-sidebar");
     const shopAName = `【E2Eテスト】サイドバー店A ${testId}`;
     const shopBName = `【E2Eテスト】サイドバー店B ${testId}`;
+    // 住所は店舗ごとに一意な文字列にする(ジオコードモックのキーを店舗ごとに
+    // 分けるため。実際の住所である必要はないテストデータ)
+    const shopAAddress = `東京都テスト区テスト1-1-1 ${shopAName}`;
+    const shopBAddress = `東京都テスト区テスト1-1-1 ${shopBName}`;
     // desktop/mobileプロジェクトが並行実行されるため座標をジッターさせ、
     // ピンのDOM要素が重ならないようにする(e2e/detail-sheet.spec.tsと同方針)
-    const shopALat = (35.60 + Math.random() * 0.05).toFixed(6);
-    const shopALng = (139.60 + Math.random() * 0.05).toFixed(6);
-    const shopBLat = (35.75 + Math.random() * 0.05).toFixed(6);
-    const shopBLng = (139.85 + Math.random() * 0.05).toFixed(6);
+    const shopALat = 35.6 + Math.random() * 0.05;
+    const shopALng = 139.6 + Math.random() * 0.05;
+    const shopBLat = 35.75 + Math.random() * 0.05;
+    const shopBLng = 139.85 + Math.random() * 0.05;
+    await mockGeocode(page, {
+      [shopAAddress]: { lat: shopALat, lng: shopALng },
+      [shopBAddress]: { lat: shopBLat, lng: shopBLng },
+    });
 
     /** 店舗を作成し公開する */
     async function createPublishedShop(
       name: string,
-      lat: string,
-      lng: string,
+      address: string,
+      lat: number,
+      lng: number,
     ): Promise<void> {
       await page.getByRole("link", { name: "店舗" }).click();
       await expect(page.getByRole("heading", { name: "店舗マスタ" })).toBeVisible();
       await page.getByTestId("shop-create-name").fill(name);
-      await page.getByTestId("shop-create-address").fill("東京都テスト区テスト1-1-1");
+      await page.getByTestId("shop-create-address").fill(address);
       await page.getByTestId("shop-create-businesshours").fill("9:00-18:00(テストデータ)");
       await page.getByTestId("shop-create-infoasof").fill("2026-06-01");
-      await page.getByTestId("shop-create-lat").fill(lat);
-      await page.getByTestId("shop-create-lng").fill(lng);
+      await page.getByTestId("shop-create-geocode").click();
+      await expect(page.getByTestId("shop-create-location-preview")).toContainText(
+        `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+      );
       await page.getByRole("button", { name: "作成" }).click();
       const row = page.getByTestId("shop-row").filter({ hasText: name });
       await expect(row).toBeVisible();
@@ -199,8 +211,8 @@ test.describe("サイドバー動画一覧", () => {
     }
 
     // 店舗A・Bを作成・公開
-    await createPublishedShop(shopAName, shopALat, shopALng);
-    await createPublishedShop(shopBName, shopBLat, shopBLng);
+    await createPublishedShop(shopAName, shopAAddress, shopALat, shopALng);
+    await createPublishedShop(shopBName, shopBAddress, shopBLat, shopBLng);
 
     // 動画: 古い方(shopAのみ紹介) / 新しい方(shopA・shopB両方を紹介) / draft(表示されないこと確認用)
     const oldVideo = await createPublishedVideo("2026-03-01");

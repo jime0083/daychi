@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { uniqueTestId } from "@/repositories/test-support";
 
 import { createEmulatorTestUser } from "./support/emulator-auth";
+import { mockGeocode } from "./support/geocode-mock";
 
 /**
  * タスク3-4(出演者フィルタ)のE2Eテスト。
@@ -101,20 +102,24 @@ test.describe("出演者フィルタ", () => {
 
     const testId = uniqueTestId("e2e-performer-filter");
     const shopName = `【E2Eテスト】出演者フィルタ店 ${testId}`;
+    const shopAddress = "東京都テスト区テスト2-2-2";
     // desktop/mobileプロジェクトが並行実行されるため座標をジッターさせ、
     // ピンのDOM要素が重ならないようにする(e2e/sidebar.spec.tsと同方針)
-    const shopLat = (35.55 + Math.random() * 0.05).toFixed(6);
-    const shopLng = (139.55 + Math.random() * 0.05).toFixed(6);
+    const shopLat = 35.55 + Math.random() * 0.05;
+    const shopLng = 139.55 + Math.random() * 0.05;
+    await mockGeocode(page, { [shopAddress]: { lat: shopLat, lng: shopLng } });
 
     // 店舗を作成し公開する(performer-test-subは参加させない店舗)
     await page.getByRole("link", { name: "店舗" }).click();
     await expect(page.getByRole("heading", { name: "店舗マスタ" })).toBeVisible();
     await page.getByTestId("shop-create-name").fill(shopName);
-    await page.getByTestId("shop-create-address").fill("東京都テスト区テスト2-2-2");
+    await page.getByTestId("shop-create-address").fill(shopAddress);
     await page.getByTestId("shop-create-businesshours").fill("10:00-19:00(テストデータ)");
     await page.getByTestId("shop-create-infoasof").fill("2026-06-01");
-    await page.getByTestId("shop-create-lat").fill(shopLat);
-    await page.getByTestId("shop-create-lng").fill(shopLng);
+    await page.getByTestId("shop-create-geocode").click();
+    await expect(page.getByTestId("shop-create-location-preview")).toContainText(
+      `${shopLat.toFixed(6)}, ${shopLng.toFixed(6)}`,
+    );
     await page.getByRole("button", { name: "作成" }).click();
     const shopRow = page.getByTestId("shop-row").filter({ hasText: shopName });
     await expect(shopRow).toBeVisible();
@@ -217,20 +222,24 @@ test.describe("出演者フィルタ", () => {
 
     const testId = uniqueTestId("e2e-performer-filter-autoclose");
     const shopName = `【E2Eテスト】出演者フィルタ自動クローズ店 ${testId}`;
+    const shopAddress = "東京都テスト区テスト3-3-3";
     // desktop/mobileプロジェクトが並行実行されるため座標をジッターさせ、
     // ピンのDOM要素が重ならないようにする(e2e/sidebar.spec.tsと同方針)
-    const shopLat = (35.75 + Math.random() * 0.05).toFixed(6);
-    const shopLng = (139.6 + Math.random() * 0.05).toFixed(6);
+    const shopLat = 35.75 + Math.random() * 0.05;
+    const shopLng = 139.6 + Math.random() * 0.05;
+    await mockGeocode(page, { [shopAddress]: { lat: shopLat, lng: shopLng } });
 
     // 店舗を作成し公開する(performer-test-subは参加させない店舗)
     await page.getByRole("link", { name: "店舗" }).click();
     await expect(page.getByRole("heading", { name: "店舗マスタ" })).toBeVisible();
     await page.getByTestId("shop-create-name").fill(shopName);
-    await page.getByTestId("shop-create-address").fill("東京都テスト区テスト3-3-3");
+    await page.getByTestId("shop-create-address").fill(shopAddress);
     await page.getByTestId("shop-create-businesshours").fill("10:00-19:00(テストデータ)");
     await page.getByTestId("shop-create-infoasof").fill("2026-06-01");
-    await page.getByTestId("shop-create-lat").fill(shopLat);
-    await page.getByTestId("shop-create-lng").fill(shopLng);
+    await page.getByTestId("shop-create-geocode").click();
+    await expect(page.getByTestId("shop-create-location-preview")).toContainText(
+      `${shopLat.toFixed(6)}, ${shopLng.toFixed(6)}`,
+    );
     await page.getByRole("button", { name: "作成" }).click();
     const shopRow = page.getByTestId("shop-row").filter({ hasText: shopName });
     await expect(shopRow).toBeVisible();
