@@ -83,7 +83,7 @@ Work 4: 実データの登録
 =====================================
 Work 5: チャンネルURL(チャンネルID)の提供
 =====================================
-[ ] 状態: 未着手
+[x] 状態: 完了(2026-09-22 提供済み: https://www.youtube.com/@DaychiCOFFEECHANNEL)
 内容:
   Daychi〜COFFEE CHANNELのチャンネルURLをClaudeに伝える(自動抽出の対象チャンネル設定に使用)
 最終ライン: Phase 4-1(YouTube Data APIクライアント)開始前
@@ -91,22 +91,27 @@ Work 5: チャンネルURL(チャンネルID)の提供
 =====================================
 Work 6: YouTube Data APIキーの取得
 =====================================
-[ ] 状態: 未着手
+[ ] 状態: 進行中(2026-09-22 YouTube Data API v3 有効化済み。APIキー作成・共有は未)
 内容:
   1. https://console.cloud.google.com でプロジェクトを選択(Firebaseと同一でOK)
-  2. 「APIとサービス」> ライブラリ で YouTube Data API v3 を有効化
-  3. 認証情報 > APIキーを作成し、Claudeに共有する(環境変数に設定する)
+  2. 「APIとサービス」> ライブラリ で YouTube Data API v3 を有効化 ← 完了
+  3. 認証情報ページ上部の「認証情報を作成」→「APIキー」でキー作成 → 作成後「キーを制限」で
+     YouTube Data API v3 のみに制限推奨 → Claudeに共有(環境変数に設定する)
 最終ライン: Phase 4-5(実API通し確認)開始前
-推奨タイミング: Phase 4 開始前
+推奨タイミング: Phase 4 実装着手時(それまでは共有不要)
 
 =====================================
-Work 7: Claude APIキーの取得
+Work 7: AI(抽出用)APIキーの取得 ※方針変更: Gemini主・Claude保留(2026-09-22)
 =====================================
 [ ] 状態: 未着手
 内容:
-  https://console.anthropic.com でAPIキーを発行し、Claudeに共有する(環境変数に設定する)
-  ※自動抽出(店名・飲食メニューの抽出)に使用。従量課金
-最終ライン: Phase 4-5(実API通し確認)開始前
+  Phase 4はプロバイダ非依存で Gemini/Claude 両対応で実装する。既定は無料枠のGeminiで
+  実際にテスト実行し、Claudeは実装するが実行保留(キー設定+明示選択時のみ動作)。
+  - Gemini APIキー(無料): https://aistudio.google.com でAPIキーを発行しClaudeに共有
+    (このプロジェクトはGemini系プロジェクトのため相性良。無料枠の制限は実装時に確認)
+  - Claude APIキー(有料・保留): https://console.anthropic.com 。使う日が来たら発行。
+    それまでは未取得でよい(Claudeアダプタは実装されるが実行されない)
+最終ライン: Phase 4のGemini実行テスト(4-5相当)開始前 ※Gemini分のみ。Claude分は保留
 
 =====================================
 Work 9: Java実行環境のPATH設定(P-001対応)
