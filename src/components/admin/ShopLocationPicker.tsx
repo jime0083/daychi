@@ -25,6 +25,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
 
 import { DEFAULT_MAP_ZOOM, MAP_STYLE_URL } from "@/lib/map-config";
+import { configureMapLibreWorker } from "@/lib/maplibre-worker";
 import type { GeoLocation } from "@/types/common";
 
 interface ShopLocationPickerProps {
@@ -64,6 +65,7 @@ export function ShopLocationPicker({ location, onChange }: ShopLocationPickerPro
     }
 
     const initialLocation = initialLocationRef.current;
+    configureMapLibreWorker();
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: MAP_STYLE_URL,

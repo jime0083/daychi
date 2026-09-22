@@ -69,6 +69,7 @@ import {
   MAP_PIN_HIGHLIGHT_FILTER,
   MAP_STYLE_URL,
 } from "@/lib/map-config";
+import { configureMapLibreWorker } from "@/lib/maplibre-worker";
 import type { Shop } from "@/types/shop";
 
 /** ピンのMarker要素に付与するdata-testid(E2Eで page.getByTestId(MAP_PIN_TEST_ID) 等に使用) */
@@ -129,6 +130,7 @@ export function PublicMap({
       return;
     }
 
+    configureMapLibreWorker();
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: MAP_STYLE_URL,
