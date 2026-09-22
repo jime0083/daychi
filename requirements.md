@@ -55,7 +55,8 @@ YouTubeチャンネル「Daychi〜COFFEE CHANNEL」で紹介されたコーヒ�
 - 機能:
   - 出演者マスタCRUD(名前、メイン出演者フラグ、表示順)
   - 動画登録: YouTube URLを貼り付け → 動画IDを抽出 → oEmbed APIでタイトル自動取得 → 公開日は手入力。一覧・編集・削除
-  - 店舗登録: 店名・住所・営業時間・情報基準日・閉店フラグを入力。**住所を入力して「住所からピンを立てる」ボタンを押すとジオコーディング(Nominatim)で地図にピンを配置**し、ずれていれば地図上でピンをドラッグして微調整して緯度経度を確定する(緯度経度の数値入力欄はUIに表示しない=2026-09-22変更)。一覧・編集・削除
+  - 店舗登録: 店名・住所・営業時間・情報基準日・閉店フラグを入力。**住所を入力して「住所からピンを立てる」ボタンを押すとジオコーディング(国土地理院GSI・キー不要・日本の番地に対応)で地図にピンを配置**し、ずれていれば地図上でピンをドラッグして微調整して緯度経度を確定する(緯度経度の数値入力欄はUIに表示しない=2026-09-22変更)。一覧・編集・削除
+    - ジオコーダは国土地理院(GSI)AddressSearchを主とする。Nominatimは日本の番地住所を解決できず不適切だったため変更(P-012、2026-09-22)。フォールバックとしてNominatimを併用してもよい
   - 訪問登録: 店舗×動画を紐付け、出演者ごとの飲食メニュー(複数品目可)を入力
   - 公開ステータス管理: shops / videos / visits の draft ⇔ published 切替
   - (Phase 4) AI抽出の実行ボタンと、抽出結果(draft)のレビュー・修正・承認UI
@@ -114,7 +115,7 @@ tags/{id}               // Phase 5
 YouTube Data API でチャンネルの動画一覧を取得 → 未登録動画を検出
   → 概要欄・字幕テキストを取得
   → Claude API で「店名 / 住所候補 / 出演者ごとの飲食メニュー」をJSON抽出
-  → ジオコーディング(Nominatim)で緯度経度の候補を取得
+  → ジオコーディング(国土地理院GSI・キー不要、日本の番地に対応)で緯度経度の候補を取得
   → videos / shops / visits に status: "draft" で保存
   → 管理画面のレビューUIで管理者が確認・修正(ピン位置はドラッグで確定)
   → 承認操作で status: "published" に変更され公開される
@@ -133,7 +134,7 @@ YouTube Data API でチャンネルの動画一覧を取得 → 未登録動画�
 | 認証 | Firebase Authentication(Google) |
 | 地図 | MapLibre GL JS + OpenFreeMap(無料・APIキー不要) |
 | E2Eテスト | Playwright + Firebase Emulator Suite |
-| 外部API | YouTube oEmbed(キー不要) / YouTube Data API v3 / Claude API / Nominatim |
+| 外部API | YouTube oEmbed(キー不要) / YouTube Data API v3 / Claude API / 国土地理院GSIジオコーディング(キー不要) |
 
 ## 7. 非機能要件
 

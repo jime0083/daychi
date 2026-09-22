@@ -111,6 +111,18 @@ Phase 2: 管理画面
     完了条件: E2E合格(フォーム入力+地図クリック/ドラッグで座標が保存される)
 
 [x] 2-4c 住所ジオコーディングによるピン配置(P-011対応) (2026-09-22 レビューPASS)
+
+[x] 2-4d ジオコーダを国土地理院GSIに変更(P-012対応) (2026-09-22 レビューPASS。GSI実疎通で番地住所解決確認)
+    内容: /api/admin/geocode の問い合わせ先を Nominatim から 国土地理院(GSI)AddressSearch
+          (https://msearch.gsi.go.jp/address-search/AddressSearch?q=<住所> 、キー不要・日本の番地に対応)
+          に変更する。GSIレスポンスは GeoJSON配列で features[0].geometry.coordinates=[lng,lat]、
+          properties.title に正規化住所。0件は「見つからない」。堅牢性のためGSIが0件/失敗時に
+          Nominatimへフォールバックしてもよい(任意)。認可(管理者トークン)・400/401/403/404/502の
+          扱いは2-4cの設計を踏襲。実住所「東京都世田谷区北沢3-31-3」等が解決すること
+    完了条件: geocode routeがGSIで日本の番地住所を解決(実確認: 北沢3-31-3等)。
+              /api/admin/geocode の認可(未認証401/非admin403)維持。E2Eはgeocodeモックのままで
+              全緑(desktop+mobile)。detail-sheet --repeat-each=20 desktop 安定pass(P-009維持)。
+              npm run typecheck / lint / test / e2e 全て緑
     内容: /admin/shops で「住所からピンを立てる」ボタンを追加。住所を入力してボタンを押すと
           サーバー側ルート /api/admin/geocode(管理者トークン認証。oembedと同じ認可パターン)が
           Nominatim(https://nominatim.openstreetmap.org/search、キー不要・User-Agent必須・
