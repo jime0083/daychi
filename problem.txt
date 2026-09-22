@@ -374,3 +374,40 @@
   0件404/空400/失敗502、認可401/403は据え置き。実GSI疎通で「東京都世田谷区北沢3-31-3」
   →lat35.66/lng139.67、道玄坂1-2-3等も解決を実装・レビュー双方で確認。E2Eはモック維持で
   80 passed、detail-sheet --repeat-each=20 で80 passed(P-009維持)。requirements.md更新済み
+
+## P-013: 地図のベクタタイルが描画されず真っ白(ピンだけ表示される)
+- 記録日: 2026-09-22
+- 状態: 解決済み
+- 発生箇所: /admin/shops の ShopLocationPicker(ユーザーが本番で確認)。公開ページ地図
+  (PublicMap)も同じMAP_STYLE_URLを使うため同様の懸念あり
+- 問題内容:
+  想定した動き: 地図に道路・地名等が描画され、ピン位置を目視確認できる
+  実際の動き: 住所からピンを立てると、真っ白(オフホワイト)な地図にピンだけが立ち、
+  背景の地図が描画されないため正しい位置か確認できない
+- 再現手順:
+  1. /admin/shops で住所入力→「住所からピンを立てる」
+  2. ピンは立つが地図が真っ白
+- 原因調査(ここまでの確認):
+  - maplibre-gl.css は import 済み(ShopLocationPicker/PublicMap 両方)
+  - 地図コンテナは h-64(256px)で高さあり
+  - MAP_STYLE_URL(https://tiles.openfreemap.org/styles/liberty)は HTTP 200・有効なスタイルJSON。
+    背景色 background-color:#f8f4f0(オフホワイト)= ユーザーが見る白と一致。
+    ベクタソースは https://tiles.openfreemap.org/planet、sprite/glyphsも同ホスト
+  - → スタイルは読めているがベクタタイルが描画されていない。resize/タイル読み込みの
+    タイミング問題(mapのコンテナ確定前に初期化しresizeしていない等)が有力だが未確定
+  - E2Eは常に tiles.openfreemap.org をブロックしていたため、実タイル描画は未検証だった
+    (=この不具合を検知できなかったテスト設計上の盲点)
+- 特定した原因:
+  MapLibreはベクタタイル(.pbf)解析を専用Web Workerで行うが、そのworkerスクリプトURLが
+  Next.js/Turbopack環境で解決できず(defaultWorkerUrlが空文字にフォールバック)Workerが
+  起動しなかった。背景・スプライト・ラスタはメインスレッド処理のため表示され、ベクタ(道路・
+  地名)だけ描画されなかった。E2Eが常にタイルをブロックしていたため未検知だった
+- 切り出したタスク: progress.txt タスク3-1a(地図タイル描画の修正・admin/公開両方)
+- 解決日: 2026-09-22
+- 解決内容:
+  /api/maplibre-worker/[file] Route Handler で maplibre-gl-worker.mjs とその依存
+  maplibre-gl-shared.mjs を node_modules から allowlist配信し、地図初期化前に setWorkerUrl で
+  指定(ShopLocationPicker/PublicMap 両方)。コミット 2073ec3。実タイルで /admin/shops と / に
+  道路・地名が描画されること(.pbf取得200)、ピン位置正常、worker routeのallowlist/パストラバーサル
+  防止を実装・レビュー双方で確認。既存モックE2Eは無修正で80 passed維持。
+  ※本番App Hosting環境での最終確認は2-8デプロイ後のスモークで実施推奨
