@@ -283,6 +283,15 @@ Phase 4: AI自動抽出
           E2Eでは抽出API層をモックしdraftデータで検証
     完了条件: E2E合格(draftの修正→承認→公開ページに表示される一連フロー)
 
+[ ] 4-3b Geminiのスキーマ指定修正と住所の作り出し防止(P-014対応)
+    内容: gemini-adapter.ts で generationConfig.responseSchema を responseJsonSchema に変更する
+          (共通スキーマのJSON Schema形式のまま渡せる。実APIで400解消を確認済みの形)。
+          あわせて共通プロンプト(prompt.ts)で「本文(概要欄・字幕・タイトル)に明記された住所だけを
+          addressCandidate に入れ、書かれていなければ null にする。推測・補完で住所を作らない」ことを
+          明確に指示する。ユニットテストで送信リクエストが responseJsonSchema を使うことを検証する
+    完了条件: ユニットテスト全通過。実キーで実動画1本(S41iyTw1_dg)の抽出が400にならず成功し、
+              本文に無い住所を作り出さないこと(レビュー時に実APIで確認)。typecheck / lint / test 緑
+
 [ ] 4-5 実API通し確認(Gemini)
     ※開始前確認: manual-work W6(YouTube APIキー)・W7(Gemini APIキー)完了必須
     内容: 実際のYouTube Data API・**Gemini API**を使い、実動画1本を取り込み→

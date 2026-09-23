@@ -411,3 +411,29 @@
   道路・地名が描画されること(.pbf取得200)、ピン位置正常、worker routeのallowlist/パストラバーサル
   防止を実装・レビュー双方で確認。既存モックE2Eは無修正で80 passed維持。
   ※本番App Hosting環境での最終確認は2-8デプロイ後のスモークで実施推奨
+
+## P-014: 実APIでGemini抽出が400エラーになる
+- 記録日: 2026-09-23
+- 状態: 修正中
+- 発生箇所: src/lib/ai-extraction/gemini-adapter.ts(タスク4-5のローカル試運転で発覚)
+- 問題内容:
+  想定した動き: 実際のGemini API(gemini-3.6-flash)で概要欄から店舗情報をJSON抽出できる
+  実際の動き: 「Gemini APIがエラーを返しました(status: 400)」で抽出が失敗する
+- 再現手順:
+  1. 実キーで fetchVideoTextContent("S41iyTw1_dg") → getExtractionProvider().extract(...)
+  2. 400で失敗
+- 原因調査(実APIで確認):
+  - アダプタは generationConfig.responseSchema に共通の EXTRACTION_JSON_SCHEMA を渡している
+  - 共通スキーマは JSON Schema 形式で addressCandidate に type: ["string","null"](型の配列)を使う
+  - Geminiの responseSchema は独自のスキーマ形式で型の配列を受け付けず、
+    「Unknown name "type" ... Proto field is not repeating, cannot start list.」で400になる
+  - 同じスキーマを generationConfig.responseJsonSchema(JSON Schema形式)で渡すと成功することを実APIで確認
+  - ユニットテストはGemini応答をモックしていたため、リクエスト形の誤りを検知できなかった
+  - あわせて、住所が本文に無い入力でGeminiが存在しない住所(福岡)を作り出すことを確認した
+    (実店舗は東京・下北沢)。住所の作り出し防止をプロンプトで徹底する必要がある
+- 特定した原因:
+  Geminiの responseSchema(独自形式)に JSON Schema 形式のスキーマを渡していたこと。
+  テストがモックのみでリクエスト形式を実APIに照らして検証していなかったこと
+- 切り出したタスク: progress.txt タスク4-3b(Geminiのスキーマ指定修正と住所の作り出し防止)
+- 解決日:
+- 解決内容:
