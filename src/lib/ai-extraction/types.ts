@@ -9,6 +9,7 @@
  *
  * サーバー専用モジュール(NEXT_PUBLIC_ は使わない)。
  */
+import type { GeoLocation } from "@/types/common";
 
 /**
  * AI抽出への入力(動画1本分)。
@@ -52,4 +53,16 @@ export interface ExtractionResult {
 export interface ExtractionProvider {
   readonly name: "gemini" | "claude";
   extract(input: ExtractionInput): Promise<ExtractionResult>;
+}
+
+/**
+ * 抽出された店舗1件分のジオコーディング結果(pipeline.geocodeExtractedShops の要素)。
+ * normalizedAddress は国土地理院(GSI)の正規化住所(geocodeWithGsiのdisplayName)であり、
+ * draft-plan.buildDraftSavePlan が番地レベルまで特定できたか(locationConfirmed)の
+ * 判定に使う(requirements.md「5.」下書き保存時の扱い、2026-09-23決定、P-016)。
+ */
+export interface GeocodedShopLocation {
+  location: GeoLocation;
+  /** GSIの正規化住所。取得できなかった場合はundefined */
+  normalizedAddress?: string;
 }

@@ -21,6 +21,9 @@ import type { DraftSavePlan } from "./draft-plan";
  * 確定させる前提のプレースホルダであり、draft状態のままでは公開ページに表示されない
  * (status: "draft" のため)。あわせて shops.locationConfirmed を false にし、
  * ピンを確定させるまで承認(published化)できないようにする(requirements.md 2026-09-23決定)。
+ * ジオコードには成功しても番地まで特定できない住所(町名・丁目止まり)の場合も、
+ * 座標自体はジオコード結果(町の中心付近)を使いつつ locationConfirmed=false にする
+ * (requirements.md 2026-09-23決定、P-016)。
  */
 const UNRESOLVED_GEOCODE_LOCATION: GeoLocation = { lat: 0, lng: 0 };
 
@@ -62,8 +65,9 @@ export async function saveDraftExtraction(plan: DraftSavePlan): Promise<SaveDraf
       continue;
     }
 
-    // ジオコード成功時はlocationConfirmedを付けない(未設定=確定済み扱い)。
-    // 失敗・住所なし(location === null)の場合のみ false を付けて承認不可とする。
+    // 番地レベルまで位置確定できた場合はlocationConfirmedを付けない(未設定=確定済み扱い)。
+    // ジオコード失敗(location === null)・番地未満(町名・丁目止まり)の場合は
+    // false を付けて承認不可とする(plan.shops[].locationConfirmedはdraft-plan.tsで算出済み)。
     const createdShop = await createShop({
       name: shopPlan.name,
       // AI抽出はname/addressCandidate/consumptionsのみを対象とするため、
@@ -75,7 +79,7 @@ export async function saveDraftExtraction(plan: DraftSavePlan): Promise<SaveDraf
       closed: false,
       tagIds: [],
       status: plan.status,
-      ...(shopPlan.location === null ? { locationConfirmed: false } : {}),
+      ...(shopPlan.locationConfirmed ? {} : { locationConfirmed: false }),
     });
     shopIds.push(createdShop.id);
   }

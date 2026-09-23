@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { validateExtractionResult } from "@/lib/ai-extraction/schema";
+import { buildExtractionJsonSchema, validateExtractionResult } from "@/lib/ai-extraction/schema";
 
 describe("validateExtractionResult", () => {
   it("正しい形式のJSONをExtractionResultとして受け入れる", () => {
@@ -95,5 +95,50 @@ describe("validateExtractionResult", () => {
         ],
       }),
     ).toThrow("shops[0].consumptions[0].items");
+  });
+});
+
+describe("buildExtractionJsonSchema", () => {
+  function getPerformerNameSchema(schema: ReturnType<typeof buildExtractionJsonSchema>) {
+    return schema.properties.shops.items.properties.consumptions.items.properties.performerName as {
+      type: string;
+      description: string;
+      examples?: string[];
+    };
+  }
+
+  it("performerNameの説明で、既知の出演者は一覧どおりの表記のまま返すよう明示する(タスク4-3d, P-016対応)", () => {
+    const schema = buildExtractionJsonSchema(["だいち", "ゲストA"]);
+    const performerNameSchema = getPerformerNameSchema(schema);
+
+    expect(performerNameSchema.type).toBe("string");
+    expect(performerNameSchema.description).toMatch(/一覧に記載された表記/);
+    expect(performerNameSchema.description).toMatch(/一覧に含まれないゲスト等の出演者については/);
+  });
+
+  it("既知の出演者名をperformerNameのexamplesとして候補提示する(一覧外の名前を禁止するenumにはしない)", () => {
+    const schema = buildExtractionJsonSchema(["だいち", "ゲストA"]);
+    const performerNameSchema = getPerformerNameSchema(schema);
+
+    expect(performerNameSchema.examples).toEqual(["だいち", "ゲストA"]);
+    expect(performerNameSchema).not.toHaveProperty("enum");
+  });
+
+  it("既知の出演者名が空の場合はexamplesを付けない", () => {
+    const schema = buildExtractionJsonSchema([]);
+    const performerNameSchema = getPerformerNameSchema(schema);
+
+    expect(performerNameSchema).not.toHaveProperty("examples");
+  });
+
+  it("shops/consumptions等の必須スキーマ構造はvalidateExtractionResultが検証する項目と一致する", () => {
+    const schema = buildExtractionJsonSchema(["だいち"]);
+
+    expect(schema.required).toEqual(["shops"]);
+    expect(schema.properties.shops.items.required).toEqual(["name", "addressCandidate", "consumptions"]);
+    expect(schema.properties.shops.items.properties.consumptions.items.required).toEqual([
+      "performerName",
+      "items",
+    ]);
   });
 });

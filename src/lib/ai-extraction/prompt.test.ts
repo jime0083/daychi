@@ -46,4 +46,12 @@ describe("buildExtractionPrompt", () => {
     expect(prompt).toMatch(/動画そのものを視聴できる場合は、動画内で実際に映っている・話されている内容を根拠にしてください/);
     expect(prompt).toMatch(/動画を視聴できない場合は、動画タイトル・概要欄・字幕\(本文\)に明記された内容のみを根拠にしてください/);
   });
+
+  it("既知の出演者は一覧どおりの表記(敬称・括弧書き含む)をそのまま返すよう明示する(タスク4-3d, P-016対応)", () => {
+    const prompt = buildExtractionPrompt(SAMPLE_INPUT);
+
+    expect(prompt).toMatch(/一覧に記載された[\s\S]*表記[\s\S]*(敬称|括弧書き)[\s\S]*一字一句変更せず/);
+    expect(prompt).toMatch(/省略・要約することは禁止/);
+    expect(prompt).toMatch(/一覧に含まれないゲスト等の出演者については、動画内・本文中の表記をそのまま使って構いません/);
+  });
 });

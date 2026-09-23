@@ -8,7 +8,7 @@ import {
   DEFAULT_GEMINI_MODEL,
   createGeminiExtractionProvider,
 } from "@/lib/ai-extraction/gemini-adapter";
-import { EXTRACTION_JSON_SCHEMA } from "@/lib/ai-extraction/schema";
+import { buildExtractionJsonSchema } from "@/lib/ai-extraction/schema";
 import type { ExtractionInput } from "@/lib/ai-extraction/types";
 
 function jsonResponse(body: unknown, init?: { status?: number }): Response {
@@ -83,7 +83,9 @@ describe("createGeminiExtractionProvider", () => {
         responseSchema?: unknown;
       };
     };
-    expect(body.generationConfig?.responseJsonSchema).toEqual(EXTRACTION_JSON_SCHEMA);
+    expect(body.generationConfig?.responseJsonSchema).toEqual(
+      buildExtractionJsonSchema(SAMPLE_INPUT.knownPerformerNames),
+    );
     expect(body.generationConfig?.responseSchema).toBeUndefined();
   });
 
@@ -236,6 +238,56 @@ describe("createGeminiExtractionProvider", () => {
         await expect(provider.extract(SAMPLE_INPUT)).rejects.toThrow(`status: ${status}`);
         expect(fetchImpl).toHaveBeenCalledTimes(1);
       }
+    });
+  });
+
+  describe("通信自体の失敗(fetchの例外)のリトライ(タスク4-3d, P-016対応)", () => {
+    it("fetchが1回例外を投げても指数バックオフでリトライして最終的に成功する", async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockRejectedValueOnce(new Error("network down"))
+        .mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, waitImpl });
+
+      const result = await provider.extract(SAMPLE_INPUT);
+
+      expect(result).toEqual(JSON.parse(SAMPLE_EXTRACTION_JSON));
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(waitImpl).toHaveBeenCalledTimes(1);
+      expect(waitImpl).toHaveBeenCalledWith(1000);
+    });
+
+    it("fetchの例外がmaxRetries回を超えて続く場合は最終的にErrorをthrowする(実時間は待たない)", async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(new Error("network down"));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({
+        apiKey: "test-key",
+        fetchImpl,
+        waitImpl,
+        maxRetries: 3,
+      });
+
+      await expect(provider.extract(SAMPLE_INPUT)).rejects.toThrow("接続に失敗しました");
+      // 初回 + リトライ3回 = 4回呼ばれる
+      expect(fetchImpl).toHaveBeenCalledTimes(4);
+      expect(waitImpl).toHaveBeenCalledTimes(3);
+    });
+
+    it("HTTPエラーと通信失敗が混在しても合算でmaxRetriesまでリトライする", async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockRejectedValueOnce(new Error("network down"))
+        .mockResolvedValueOnce(jsonResponse({}, { status: 503 }))
+        .mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, waitImpl, maxRetries: 3 });
+
+      const result = await provider.extract(SAMPLE_INPUT);
+
+      expect(result).toEqual(JSON.parse(SAMPLE_EXTRACTION_JSON));
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+      expect(waitImpl).toHaveBeenCalledTimes(2);
     });
   });
 });

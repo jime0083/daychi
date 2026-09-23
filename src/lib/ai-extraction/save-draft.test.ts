@@ -64,6 +64,7 @@ describe("saveDraftExtraction", () => {
           name: "新規の喫茶店",
           addressCandidate: "東京都渋谷区1-1-1",
           location: { lat: 35.0, lng: 139.0 },
+          locationConfirmed: true,
           isDuplicate: false,
           existingShopId: null,
         },
@@ -117,6 +118,7 @@ describe("saveDraftExtraction", () => {
           name: "喫茶ダイチ",
           addressCandidate: null,
           location: null,
+          locationConfirmed: false,
           isDuplicate: true,
           existingShopId: "existing-shop-id",
         },
@@ -146,6 +148,7 @@ describe("saveDraftExtraction", () => {
           name: "新規の喫茶店",
           addressCandidate: null,
           location: null,
+          locationConfirmed: false,
           isDuplicate: false,
           existingShopId: null,
         },
@@ -182,6 +185,7 @@ describe("saveDraftExtraction", () => {
           name: "新規の喫茶店2",
           addressCandidate: null,
           location: null,
+          locationConfirmed: false,
           isDuplicate: false,
           existingShopId: null,
         },
@@ -205,7 +209,14 @@ describe("saveDraftExtraction", () => {
       status: "draft",
       video: { videoId: "video-4", title: "動画", publishedAt: "2026-01-04T00:00:00Z" },
       shops: [
-        { name: "住所不明の店", addressCandidate: null, location: null, isDuplicate: false, existingShopId: null },
+        {
+          name: "住所不明の店",
+          addressCandidate: null,
+          location: null,
+          locationConfirmed: false,
+          isDuplicate: false,
+          existingShopId: null,
+        },
       ],
       visits: [{ shopIndex: 0, consumptions: [] }],
     };
@@ -227,6 +238,7 @@ describe("saveDraftExtraction", () => {
           name: "ジオコード失敗の店",
           addressCandidate: "存在しない住所999-999",
           location: null,
+          locationConfirmed: false,
           isDuplicate: false,
           existingShopId: null,
         },
@@ -238,6 +250,32 @@ describe("saveDraftExtraction", () => {
 
     expect(createShopMock).toHaveBeenCalledWith(
       expect.objectContaining({ location: { lat: 0, lng: 0 }, locationConfirmed: false }),
+    );
+  });
+
+  it("ジオコードには成功したが番地未満(町名・丁目止まり)の店舗は実座標のままlocationConfirmed=falseにする(タスク4-3d, P-016対応)", async () => {
+    const saveDraftExtraction = await importSaveDraftExtraction();
+    const plan: DraftSavePlan = {
+      status: "draft",
+      video: { videoId: "video-6", title: "動画", publishedAt: "2026-01-06T00:00:00Z" },
+      shops: [
+        {
+          name: "町名止まりの店",
+          addressCandidate: "東京都世田谷区北沢",
+          location: { lat: 35.661, lng: 139.668 },
+          locationConfirmed: false,
+          isDuplicate: false,
+          existingShopId: null,
+        },
+      ],
+      visits: [{ shopIndex: 0, consumptions: [] }],
+    };
+
+    await saveDraftExtraction(plan);
+
+    // プレースホルダ(0,0)ではなく実際のジオコード結果の座標を使う
+    expect(createShopMock).toHaveBeenCalledWith(
+      expect.objectContaining({ location: { lat: 35.661, lng: 139.668 }, locationConfirmed: false }),
     );
   });
 });

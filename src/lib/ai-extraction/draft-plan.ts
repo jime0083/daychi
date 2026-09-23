@@ -10,7 +10,9 @@ import type { Performer } from "@/types/performer";
 import type { Shop } from "@/types/shop";
 import type { GeoLocation } from "@/types/common";
 
-import type { ExtractionResult } from "./types";
+import { isBanchiLevelAddress } from "@/lib/geocode";
+
+import type { ExtractionResult, GeocodedShopLocation } from "./types";
 
 /** 動画名の全角/半角・大文字小文字・空白の違いを吸収した比較用文字列に正規化する */
 function normalizeName(name: string): string {
@@ -22,18 +24,48 @@ export function normalizeShopName(name: string): string {
   return normalizeName(name);
 }
 
+/** resolvePerformerIdのあいまい一致で吸収する敬称(末尾のみ除去) */
+const HONORIFIC_SUFFIX_PATTERN = /(さん|くん|ちゃん)$/;
+
+/** 全角/半角いずれの括弧書き(例:「(カメラマン)」)も除去する(NFKCで全角括弧は半角化される前提) */
+const BRACKET_PATTERN = /\([^)]*\)/g;
+
+/**
+ * 出演者名の表記ゆれ(敬称「さん/くん/ちゃん」・括弧書きの有無)を吸収した
+ * あいまい一致用の比較文字列に正規化する(resolvePerformerIdの完全一致で見つからない場合のみ使用)。
+ * 例: 「高橋さん(カメラマン)」「高橋さん」「高橋」は、いずれも「高橋」に正規化される。
+ */
+function normalizePerformerNameLoosely(name: string): string {
+  const withoutBrackets = name.normalize("NFKC").replace(BRACKET_PATTERN, "");
+  return withoutBrackets.replace(/\s+/g, "").toLowerCase().replace(HONORIFIC_SUFFIX_PATTERN, "");
+}
+
 /**
  * 出演者名(AI抽出結果由来)を、既知の出演者マスタ(performers)のIDに解決する。
- * 正規化(全角/半角・大文字小文字・空白の違いを無視)して一致するものを探す。
- * 見つからない場合(未登録の出演者)は null を返す(実保存側で扱いを決める)。
+ * まず完全一致(全角/半角・大文字小文字・空白の違いを無視した正規化)を優先して探す。
+ * 完全一致が無い場合のみ、敬称「さん/くん/ちゃん」・括弧書きの有無を吸収したあいまい一致を試みる
+ * (requirements.md「5.」下書き保存時の扱い、2026-09-23決定、P-016)。
+ * いずれの段階でも一致候補が複数(あいまい)になる場合、および一致が見つからない場合は
+ * null を返す(実保存側でunresolvedConsumptions扱いにする)。
  */
 export function resolvePerformerId(
   performerName: string,
   knownPerformers: readonly Performer[],
 ): string | null {
-  const normalized = normalizeName(performerName);
-  const match = knownPerformers.find((performer) => normalizeName(performer.name) === normalized);
-  return match?.id ?? null;
+  const exactNormalized = normalizeName(performerName);
+  const exactMatches = knownPerformers.filter((performer) => normalizeName(performer.name) === exactNormalized);
+  if (exactMatches.length === 1) {
+    return exactMatches[0].id;
+  }
+  if (exactMatches.length > 1) {
+    return null;
+  }
+
+  const looseNormalized = normalizePerformerNameLoosely(performerName);
+  const looseMatches = knownPerformers.filter(
+    (performer) => normalizePerformerNameLoosely(performer.name) === looseNormalized,
+  );
+  return looseMatches.length === 1 ? looseMatches[0].id : null;
 }
 
 /** 店舗重複検出の結果 */
@@ -69,6 +101,13 @@ export interface DraftShopPlan {
   addressCandidate: string | null;
   /** ジオコード結果(取得できなかった場合はnull。保存側でプレースホルダ座標を補う) */
   location: GeoLocation | null;
+  /**
+   * 番地レベルまで位置が確定できたか。false の場合、保存側(save-draft.ts)が
+   * shops.locationConfirmed=false を付与し、管理者がピンを確定するまで承認不可にする
+   * (requirements.md「5.」下書き保存時の扱い、2026-09-23決定、P-016)。
+   * ジオコード自体に失敗した場合(location === null)もfalseになる。
+   */
+  locationConfirmed: boolean;
   isDuplicate: boolean;
   /** isDuplicate === true の場合のみ非null(重複先の既存shopId) */
   existingShopId: string | null;
@@ -110,7 +149,7 @@ export interface BuildDraftSavePlanInput {
   /** 重複検出の比較対象とする既存店舗一覧(requirements.mdの想定に合わせ、通常はpublished店舗) */
   existingPublishedShops: readonly Shop[];
   /** extraction.shops と同じ順序・同じ長さのジオコード結果(取得できない要素はnull) */
-  geocodeResults: ReadonlyArray<GeoLocation | null>;
+  geocodeResults: ReadonlyArray<GeocodedShopLocation | null>;
 }
 
 /**
@@ -120,10 +159,12 @@ export interface BuildDraftSavePlanInput {
 export function buildDraftSavePlan(input: BuildDraftSavePlanInput): DraftSavePlan {
   const shops: DraftShopPlan[] = input.extraction.shops.map((shop, index) => {
     const duplicate = findDuplicateShop(shop.name, input.existingPublishedShops);
+    const geocoded = input.geocodeResults[index] ?? null;
     return {
       name: shop.name,
       addressCandidate: shop.addressCandidate,
-      location: input.geocodeResults[index] ?? null,
+      location: geocoded?.location ?? null,
+      locationConfirmed: geocoded !== null && isBanchiLevelAddress(geocoded.normalizedAddress),
       isDuplicate: duplicate.isDuplicate,
       existingShopId: duplicate.existingShopId,
     };

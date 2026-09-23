@@ -28,9 +28,29 @@ describe("geocodeExtractedShops", () => {
 
     const results = await geocodeExtractedShops(shops, { fetchImpl });
 
-    expect(results).toEqual([{ lat: 35.7, lng: 139.7 }, null]);
+    expect(results).toEqual([{ location: { lat: 35.7, lng: 139.7 } }, null]);
     // addressCandidateがnullの店舗ではfetchが呼ばれない
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("GSIの正規化住所(properties.title)をnormalizedAddressとして結果に含める(タスク4-3d, P-016対応)", async () => {
+    const shops: ExtractedShop[] = [
+      { name: "店A", addressCandidate: "東京都世田谷区北沢3-31-3", consumptions: [] },
+    ];
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse([
+        {
+          geometry: { coordinates: [139.668, 35.661] },
+          properties: { title: "東京都世田谷区北沢三丁目３１番３号" },
+        },
+      ]),
+    );
+
+    const results = await geocodeExtractedShops(shops, { fetchImpl });
+
+    expect(results).toEqual([
+      { location: { lat: 35.661, lng: 139.668 }, normalizedAddress: "東京都世田谷区北沢三丁目３１番３号" },
+    ]);
   });
 
   it("ジオコーディングが失敗(通信エラー)した場合はnullとして続行する", async () => {
@@ -91,6 +111,8 @@ describe("buildDraftPlanFromVideo", () => {
     });
     expect(plan.status).toBe("draft");
     expect(plan.shops[0].location).toEqual({ lat: 35.7, lng: 139.7 });
+    // GSI応答にproperties.title(正規化住所)が無いため番地レベル確定とは判定されない
+    expect(plan.shops[0].locationConfirmed).toBe(false);
     expect(plan.visits[0].consumptions[0].performerId).toBe("performer-1");
   });
 });

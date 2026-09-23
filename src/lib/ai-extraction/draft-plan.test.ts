@@ -56,6 +56,40 @@ describe("resolvePerformerId", () => {
   it("一致する出演者が見つからない場合はnullを返す", () => {
     expect(resolvePerformerId("未登録の出演者", performers)).toBeNull();
   });
+
+  describe("敬称・括弧書きの表記ゆれ吸収(タスク4-3d, P-016対応)", () => {
+    const performersWithRole = [
+      makePerformer("performer-1", "高橋さん(カメラマン)"),
+      makePerformer("performer-2", "出井さん"),
+      makePerformer("performer-3", "かみちぃさん"),
+    ];
+
+    it("敬称を省略した表記(「高橋さん」)でもあいまい一致で解決できる", () => {
+      expect(resolvePerformerId("高橋さん", performersWithRole)).toBe("performer-1");
+    });
+
+    it("敬称も括弧書きも省略した表記(「高橋」)でもあいまい一致で解決できる", () => {
+      expect(resolvePerformerId("高橋", performersWithRole)).toBe("performer-1");
+    });
+
+    it("全角括弧の表記(「高橋さん（カメラマン）」)でもあいまい一致で解決できる", () => {
+      expect(resolvePerformerId("高橋さん（カメラマン）", performersWithRole)).toBe("performer-1");
+    });
+
+    it("一覧どおりの完全一致がある場合はあいまい一致より優先される", () => {
+      expect(resolvePerformerId("高橋さん(カメラマン)", performersWithRole)).toBe("performer-1");
+      expect(resolvePerformerId("出井さん", performersWithRole)).toBe("performer-2");
+    });
+
+    it("あいまい一致で複数候補になる場合は未一致(null)にする", () => {
+      const ambiguousPerformers = [
+        makePerformer("performer-a", "田中さん"),
+        makePerformer("performer-b", "田中くん"),
+      ];
+
+      expect(resolvePerformerId("田中", ambiguousPerformers)).toBeNull();
+    });
+  });
 });
 
 describe("findDuplicateShop", () => {
@@ -96,7 +130,9 @@ describe("buildDraftSavePlan", () => {
       extraction,
       knownPerformers,
       existingPublishedShops,
-      geocodeResults: [{ lat: 35.0, lng: 139.0 }],
+      geocodeResults: [
+        { location: { lat: 35.0, lng: 139.0 }, normalizedAddress: "東京都渋谷区道玄坂一丁目１番地" },
+      ],
     });
 
     expect(plan.status).toBe("draft");
@@ -110,6 +146,7 @@ describe("buildDraftSavePlan", () => {
         name: "新規の喫茶店",
         addressCandidate: "東京都渋谷区1-1-1",
         location: { lat: 35.0, lng: 139.0 },
+        locationConfirmed: true,
         isDuplicate: false,
         existingShopId: null,
       },
@@ -139,6 +176,7 @@ describe("buildDraftSavePlan", () => {
       name: "喫茶 ダイチ",
       addressCandidate: null,
       location: null,
+      locationConfirmed: false,
       isDuplicate: true,
       existingShopId: "shop-existing",
     });
@@ -166,6 +204,62 @@ describe("buildDraftSavePlan", () => {
     expect(plan.visits[0].consumptions).toEqual([
       { performerId: null, performerName: "未登録ゲスト", items: ["カフェラテ"] },
     ]);
+  });
+
+  describe("locationConfirmedの番地粒度判定(タスク4-3d, P-016対応)", () => {
+    const extraction: ExtractionResult = {
+      shops: [{ name: "店A", addressCandidate: "東京都世田谷区北沢3-31-3", consumptions: [] }],
+    };
+
+    it("正規化住所に「番」を含む(番地まで特定できた)場合はlocationConfirmed:trueにする", () => {
+      const plan = buildDraftSavePlan({
+        video: { videoId: "video-banchi", title: "動画", publishedAt: "2026-01-06T00:00:00Z" },
+        extraction,
+        knownPerformers,
+        existingPublishedShops: [],
+        geocodeResults: [
+          { location: { lat: 35.66, lng: 139.66 }, normalizedAddress: "東京都世田谷区北沢三丁目３１番３号" },
+        ],
+      });
+
+      expect(plan.shops[0].locationConfirmed).toBe(true);
+    });
+
+    it("正規化住所が丁目止まり(「番」を含まない)の場合はlocationConfirmed:falseにする", () => {
+      const plan = buildDraftSavePlan({
+        video: { videoId: "video-chome", title: "動画", publishedAt: "2026-01-06T00:00:00Z" },
+        extraction,
+        knownPerformers,
+        existingPublishedShops: [],
+        geocodeResults: [{ location: { lat: 35.66, lng: 139.66 }, normalizedAddress: "東京都世田谷区北沢三丁目" }],
+      });
+
+      expect(plan.shops[0].locationConfirmed).toBe(false);
+    });
+
+    it("正規化住所が町名止まり(「番」を含まない)の場合はlocationConfirmed:falseにする", () => {
+      const plan = buildDraftSavePlan({
+        video: { videoId: "video-town", title: "動画", publishedAt: "2026-01-06T00:00:00Z" },
+        extraction,
+        knownPerformers,
+        existingPublishedShops: [],
+        geocodeResults: [{ location: { lat: 35.66, lng: 139.66 }, normalizedAddress: "東京都世田谷区北沢" }],
+      });
+
+      expect(plan.shops[0].locationConfirmed).toBe(false);
+    });
+
+    it("ジオコーディングに失敗した(結果がnull)場合はlocationConfirmed:falseにする", () => {
+      const plan = buildDraftSavePlan({
+        video: { videoId: "video-fail", title: "動画", publishedAt: "2026-01-06T00:00:00Z" },
+        extraction,
+        knownPerformers,
+        existingPublishedShops: [],
+        geocodeResults: [null],
+      });
+
+      expect(plan.shops[0].locationConfirmed).toBe(false);
+    });
   });
 
   it("店舗が複数抽出された場合、shopsとvisitsの対応(shopIndex)が正しく組み立てられる", () => {

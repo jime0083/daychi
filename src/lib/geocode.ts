@@ -87,3 +87,15 @@ export async function geocodeWithGsi(
 
   return { lat, lng, displayName: first?.properties?.title };
 }
+
+/**
+ * GSIの正規化住所(geocodeWithGsiのdisplayName)が番地レベルまで特定できているかを判定する。
+ * GSIは番地まで分かる住所では「〜番」「〜番〜号」を含む表記を返すが、町名・丁目止まりの
+ * 住所では「番」を含まない(例: 北沢3-31-3→「北沢三丁目３１番３号」(true)、
+ * 北沢3丁目→「北沢三丁目」(false)、北沢→「北沢」(false))。
+ * requirements.md「5.」下書き保存時の扱い(2026-09-23決定、P-016)の
+ * 「正規化住所に「番」を含む場合のみ確定扱い」に対応する。
+ */
+export function isBanchiLevelAddress(normalizedAddress: string | undefined): boolean {
+  return normalizedAddress !== undefined && normalizedAddress.includes("番");
+}

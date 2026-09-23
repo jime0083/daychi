@@ -6,7 +6,7 @@
  *
  * Gemini REST API(generativelanguage v1beta の :generateContent)をfetchで直接呼び出す
  * (SDK不要)。JSON出力を強制するため responseMimeType: "application/json" と
- * 共通スキーマ(EXTRACTION_JSON_SCHEMA)を responseJsonSchema として渡す。
+ * 共通スキーマ(buildExtractionJsonSchema)を responseJsonSchema として渡す。
  * (Gemini独自形式の responseSchema は addressCandidate の type: ["string","null"] のような
  * 型の配列を受け付けず400になるため使わない。JSON Schema形式をそのまま渡せる
  * responseJsonSchema を使う。problem.txt P-014参照、実APIで解消を確認済み)
@@ -18,9 +18,10 @@
  * generationConfig.mediaResolution=MEDIA_RESOLUTION_LOW(低解像度・低コスト設定)を指定する。
  * 実APIで33分動画・約18万トークン・約27秒で成功することを確認済み(problem.txt P-015)。
  *
- * また、Gemini APIの一時的な過負荷エラー(429/500/502/503/504)は指数バックオフで
- * 数回リトライする(requirements.md「AI APIの一時的な過負荷エラー(503等)は自動で
- * 数回リトライする」)。400/401/403等の非一時的エラーは即座に失敗させる。
+ * また、Gemini APIの一時的な過負荷エラー(429/500/502/503/504)、および通信自体の失敗
+ * (fetchの例外)は、いずれも指数バックオフで数回リトライする(requirements.md
+ * 「AI APIの一時的な過負荷エラー(503等)や通信自体の失敗は自動で数回リトライする」、
+ * 2026-09-23決定、P-016)。400/401/403等の非一時的エラーは即座に失敗させる。
  *
  * サーバー専用モジュール(NEXT_PUBLIC_ は使わない)。
  * - APIキー: 環境変数 GEMINI_API_KEY を `x-goog-api-key` ヘッダーで送る
@@ -31,7 +32,7 @@
  * リトライの待機処理も引数(DI)として差し替え可能にしており、ユニットテストでは
  * 実時間を待たずにリトライ挙動を検証する。
  */
-import { EXTRACTION_JSON_SCHEMA, validateExtractionResult } from "./schema";
+import { buildExtractionJsonSchema, validateExtractionResult } from "./schema";
 import { buildExtractionPrompt } from "./prompt";
 import type { ExtractionInput, ExtractionProvider, ExtractionResult } from "./types";
 import { buildYoutubeWatchUrl } from "@/lib/youtube";
@@ -103,8 +104,12 @@ export interface GeminiExtractionProviderOptions {
 
 /**
  * Gemini REST APIを呼び出しJSONを返す。
- * 一時的エラー(429/500/502/503/504)は maxRetries 回まで指数バックオフで再試行する。
- * それ以外の非2xx(400/401/403等)、および再試行回数を使い切った一時的エラーはエラーをthrowする。
+ * 一時的エラー(429/500/502/503/504)、および通信自体の失敗(fetchの例外。DNS解決不可・
+ * タイムアウト等)は、いずれも maxRetries 回まで指数バックオフで再試行する
+ * (requirements.md「5.」抽出の入力「AI APIの一時的な過負荷エラー...や通信自体の失敗は
+ * 自動で数回リトライする」、2026-09-23決定、P-016)。
+ * それ以外の非2xx(400/401/403等)、および再試行回数を使い切った一時的エラー・通信失敗は
+ * エラーをthrowする。
  */
 async function fetchGeminiJson(
   url: string,
@@ -128,7 +133,12 @@ async function fetchGeminiJson(
         body: JSON.stringify(body),
       });
     } catch {
-      throw new Error("Gemini APIへの接続に失敗しました");
+      if (attempt >= maxRetries) {
+        throw new Error("Gemini APIへの接続に失敗しました");
+      }
+      attempt += 1;
+      await wait(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+      continue;
     }
 
     if (response.ok) {
@@ -177,7 +187,7 @@ export function createGeminiExtractionProvider(
         generationConfig: {
           mediaResolution: "MEDIA_RESOLUTION_LOW",
           responseMimeType: "application/json",
-          responseJsonSchema: EXTRACTION_JSON_SCHEMA,
+          responseJsonSchema: buildExtractionJsonSchema(input.knownPerformerNames),
         },
       };
 

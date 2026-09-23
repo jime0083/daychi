@@ -8,39 +8,61 @@
  */
 import type { ExtractedConsumption, ExtractedShop, ExtractionResult } from "./types";
 
+/** performerNameフィールドの説明文(既知の出演者は一覧どおりの表記で返すことを再度明示する) */
+const PERFORMER_NAME_DESCRIPTION =
+  "動画に映っている人物が「既知の出演者一覧」に含まれる場合は、一覧に記載された表記" +
+  "(敬称や括弧書きを含む)を一字一句変更せずそのまま返してください。一覧に含まれないゲスト等の" +
+  "出演者については、動画内・本文中の表記をそのまま使って構いません。";
+
 /**
- * LLMへの構造化出力指定(Gemini generationConfig.responseSchema /
- * Claude output_config.format.schema)に渡すJSON Schema。
+ * LLMへの構造化出力指定(Gemini generationConfig.responseJsonSchema /
+ * Claude output_config.format.schema)に渡すJSON Schemaを組み立てる。
  * ExtractionResult型と対応する(店名/住所候補/出演者ごとの飲食メニュー)。
+ *
+ * knownPerformerNames を渡すと、performerNameフィールドの examples として既知の出演者名を
+ * 候補提示する(あくまで例示であり、一覧に無いゲスト名を禁止するenumにはしない。
+ * requirements.md「5.」下書き保存時の扱い、2026-09-23決定、P-016)。
  */
-export const EXTRACTION_JSON_SCHEMA = {
-  type: "object",
-  properties: {
-    shops: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          name: { type: "string" },
-          addressCandidate: { type: ["string", "null"] },
-          consumptions: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                performerName: { type: "string" },
-                items: { type: "array", items: { type: "string" } },
+export function buildExtractionJsonSchema(knownPerformerNames: readonly string[] = []) {
+  return {
+    type: "object",
+    properties: {
+      shops: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            addressCandidate: { type: ["string", "null"] },
+            consumptions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  performerName: {
+                    type: "string",
+                    description: PERFORMER_NAME_DESCRIPTION,
+                    ...(knownPerformerNames.length > 0 ? { examples: [...knownPerformerNames] } : {}),
+                  },
+                  items: { type: "array", items: { type: "string" } },
+                },
+                required: ["performerName", "items"],
               },
-              required: ["performerName", "items"],
             },
           },
+          required: ["name", "addressCandidate", "consumptions"],
         },
-        required: ["name", "addressCandidate", "consumptions"],
       },
     },
-  },
-  required: ["shops"],
-} as const;
+    required: ["shops"],
+  };
+}
+
+/**
+ * 既知の出演者名を含まない基本形のJSON Schema(後方互換用・テスト等での参照に使う)。
+ * 実際のAPI呼び出しでは buildExtractionJsonSchema(knownPerformerNames) を使う。
+ */
+export const EXTRACTION_JSON_SCHEMA = buildExtractionJsonSchema();
 
 function invalid(detail: string): never {
   throw new Error(`AI応答のスキーマが不正です: ${detail}`);

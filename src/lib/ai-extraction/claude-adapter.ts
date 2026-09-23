@@ -23,7 +23,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 import { buildExtractionPrompt } from "./prompt";
-import { EXTRACTION_JSON_SCHEMA, validateExtractionResult } from "./schema";
+import { buildExtractionJsonSchema, validateExtractionResult } from "./schema";
 import type { ExtractionInput, ExtractionProvider, ExtractionResult } from "./types";
 
 /** 既定のClaudeモデル */
@@ -137,7 +137,10 @@ export function createClaudeExtractionProvider(
         // アシスタントのprefillは使わない(400になるため)。userメッセージのみ送る。
         messages: [{ role: "user", content: buildExtractionPrompt(input) }],
         output_config: {
-          format: { type: "json_schema", schema: EXTRACTION_JSON_SCHEMA as Record<string, unknown> },
+          format: {
+            type: "json_schema",
+            schema: buildExtractionJsonSchema(input.knownPerformerNames) as Record<string, unknown>,
+          },
         },
         thinking: { type: "adaptive" },
       });

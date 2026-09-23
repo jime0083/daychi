@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { geocodeWithGsi } from "@/lib/geocode";
+import { geocodeWithGsi, isBanchiLevelAddress } from "@/lib/geocode";
 
 function jsonResponse(body: unknown, init?: { status?: number }): Response {
   return new Response(JSON.stringify(body), {
@@ -67,5 +67,24 @@ describe("geocodeWithGsi", () => {
     expect(result).toBeNull();
     expect(globalFetchSpy).toHaveBeenCalledTimes(1);
     globalFetchSpy.mockRestore();
+  });
+});
+
+describe("isBanchiLevelAddress", () => {
+  it("番地まで特定できた正規化住所(「番」を含む)はtrueと判定する", () => {
+    expect(isBanchiLevelAddress("東京都世田谷区北沢三丁目３１番３号")).toBe(true);
+    expect(isBanchiLevelAddress("東京都渋谷区道玄坂一丁目２番")).toBe(true);
+  });
+
+  it("丁目止まりの正規化住所(「番」を含まない)はfalseと判定する", () => {
+    expect(isBanchiLevelAddress("東京都世田谷区北沢三丁目")).toBe(false);
+  });
+
+  it("町名止まりの正規化住所(「番」を含まない)はfalseと判定する", () => {
+    expect(isBanchiLevelAddress("東京都世田谷区北沢")).toBe(false);
+  });
+
+  it("正規化住所自体が取得できない(undefined)場合はfalseと判定する", () => {
+    expect(isBanchiLevelAddress(undefined)).toBe(false);
   });
 });

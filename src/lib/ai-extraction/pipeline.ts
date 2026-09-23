@@ -10,12 +10,11 @@
  */
 import type { Performer } from "@/types/performer";
 import type { Shop } from "@/types/shop";
-import type { GeoLocation } from "@/types/common";
 
 import { geocodeWithGsi } from "@/lib/geocode";
 
 import { buildDraftSavePlan, type DraftSavePlan, type DraftVideoPlan } from "./draft-plan";
-import type { ExtractedShop, ExtractionProvider } from "./types";
+import type { ExtractedShop, ExtractionProvider, GeocodedShopLocation } from "./types";
 
 type FetchLike = typeof fetch;
 
@@ -30,14 +29,17 @@ export interface GeocodeExtractedShopsOptions {
  * 住所候補が無い(null・空文字)場合、およびジオコーディングが失敗した場合(通信エラー・
  * 該当なし)は、いずれもその要素をnullとして返す(全体を止めない。
  * src/lib/youtube-transcript.tsの字幕取得フォールバックと同じ考え方)。
+ * 成功時はGSIの正規化住所(normalizedAddress)も合わせて返す。番地レベルまで特定できたか
+ * (locationConfirmedにするか)の判定はdraft-plan.buildDraftSavePlan側の責務とする。
  *
- * @returns shops と同じ順序・同じ長さの配列(取得できた要素は {lat, lng}、それ以外はnull)
+ * @returns shops と同じ順序・同じ長さの配列(取得できた要素は {location, normalizedAddress}、
+ *          それ以外はnull)
  */
 export async function geocodeExtractedShops(
   shops: readonly ExtractedShop[],
   options: GeocodeExtractedShopsOptions = {},
-): Promise<Array<GeoLocation | null>> {
-  const results: Array<GeoLocation | null> = [];
+): Promise<Array<GeocodedShopLocation | null>> {
+  const results: Array<GeocodedShopLocation | null> = [];
 
   for (const shop of shops) {
     const address = shop.addressCandidate?.trim();
@@ -48,7 +50,11 @@ export async function geocodeExtractedShops(
 
     try {
       const geocoded = await geocodeWithGsi(address, { fetchImpl: options.fetchImpl });
-      results.push(geocoded ? { lat: geocoded.lat, lng: geocoded.lng } : null);
+      results.push(
+        geocoded
+          ? { location: { lat: geocoded.lat, lng: geocoded.lng }, normalizedAddress: geocoded.displayName }
+          : null,
+      );
     } catch {
       results.push(null);
     }
