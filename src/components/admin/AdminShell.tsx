@@ -19,6 +19,8 @@ const NAV_ITEMS = [
   { href: "/admin/videos", label: "動画" },
   { href: "/admin/shops", label: "店舗" },
   { href: "/admin/visits", label: "訪問" },
+  { href: "/admin/import", label: "AI取り込み" },
+  { href: "/admin/review", label: "レビュー" },
 ] as const;
 
 export function AdminShell({ user, children }: { user: User; children: ReactNode }) {
