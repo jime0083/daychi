@@ -441,3 +441,31 @@
   (コミット 9ed9b31)。実APIで S41iyTw1_dg の抽出が400にならず成功、住所の無い本文で3回とも
   addressCandidate=null を確認(レビューPASS)。※実動画は概要欄に住所・メニューが無く字幕も取れないため
   店名しか抽出できない点は別問題として P-015 で扱う
+
+## P-015: AI抽出で店名しか取れない(住所・飲食メニューが空になる)
+- 記録日: 2026-09-23
+- 状態: 修正中
+- 発生箇所: src/lib/youtube-transcript.ts / src/lib/ai-extraction/gemini-adapter.ts(タスク4-3bの実API検証で発覚)
+- 問題内容:
+  想定した動き: 実動画から店名・住所候補・出演者ごとの飲食メニューが抽出され、下書きの手直しが少なくて済む
+  実際の動き: S41iyTw1_dg(筋金珈琲焙煎所)で抽出結果が店名のみ。consumptions が空、住所も null
+- 再現手順:
+  1. 実キーで fetchVideoTextContent("S41iyTw1_dg") → extract
+  2. 結果 {"shops":[{"name":"筋金珈琲焙煎所","addressCandidate":null,"consumptions":[]}]}
+- 原因調査(実APIで確認):
+  - 概要欄(451文字)には店名とHP・出演者SNSしか書かれておらず、住所・飲食メニューの記載が無い
+  - YouTube Data API captions.list では字幕は自動生成(ja, asr)のみ。非公式 timedtext の一覧取得は空を返し、
+    字幕テキストを取得できない(transcript=null)
+  - → AIに渡る本文に住所・メニューの根拠が無いため、作り出し防止(P-014)どおり空で返っていた
+  - 代替手段の検証: Gemini の generateContent に動画URL(file_data.file_uri=YouTube URL)を渡し、
+    mediaResolution=MEDIA_RESOLUTION_LOW で抽出したところ、店名と出演者3名分「スジガネブレンド」を
+    正しく抽出(手入力の正解と一致)。住所は動画内で言及が無く null(正しい)。無料枠キーで成功、
+    33分動画で約27秒・入力約18万トークン
+  - 同検証中、Geminiの一時的な503(overloaded)が複数回発生
+- 特定した原因:
+  このチャンネルでは概要欄に店舗詳細が書かれず、字幕も自動生成のみで取得できないため、テキストだけでは
+  抽出材料が不足すること(入力ソースの設計が実データに合っていなかった)
+- 切り出したタスク: progress.txt タスク4-3c(Gemini抽出を動画入力方式に変更・503リトライ・取り込み中表示)。
+  仕様変更として requirements.md「5. AI自動抽出パイプライン」を更新(2026-09-23)
+- 解決日:
+- 解決内容:

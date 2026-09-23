@@ -292,6 +292,19 @@ Phase 4: AI自動抽出
     完了条件: ユニットテスト全通過。実キーで実動画1本(S41iyTw1_dg)の抽出が400にならず成功し、
               本文に無い住所を作り出さないこと(レビュー時に実APIで確認)。typecheck / lint / test 緑
 
+[ ] 4-3c Gemini抽出を動画入力方式に変更(P-015対応)
+    内容: requirements.md「5.」の抽出入力(2026-09-23変更)に合わせる。
+          (1) Geminiアダプタ: contents に YouTube URL の動画パート(file_data.file_uri)とテキスト(タイトル+概要欄+
+              字幕があれば字幕)を渡し、generationConfig.mediaResolution=MEDIA_RESOLUTION_LOW を指定。
+              プロンプトは「動画内で映っている・話されている内容と本文を根拠にし、推測で補わない」方針に更新
+              (P-014の作り出し防止は維持)。ExtractionInput に videoId(またはURL)を追加
+          (2) Claudeアダプタ: 動画は渡さずテキストのみ(現状維持、既定では実行しない)
+          (3) Gemini呼び出しの一時エラー(503/429/500等)を指数バックオフで数回リトライ。400等は即失敗
+          (4) 取り込み画面: 1本ずつ処理中であることが分かる表示(スピナー・何本目か等)
+          (5) 抽出APIルートが数十秒の処理でタイムアウトしない設定を確認・必要なら設定
+    完了条件: ユニットテスト全通過(動画パートの送信、リトライ、Claudeはテキストのみ)。E2E全緑。
+              実APIで S41iyTw1_dg を抽出し出演者3名分のメニューが取れること(レビューで確認)
+
 [ ] 4-5 実API通し確認(Gemini)
     ※開始前確認: manual-work W6(YouTube APIキー)・W7(Gemini APIキー)完了必須
     内容: 実際のYouTube Data API・**Gemini API**を使い、実動画1本を取り込み→
