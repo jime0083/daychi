@@ -346,10 +346,20 @@ Phase 4: AI自動抽出
 Phase 5: タグ機能(全機能完成後に実施)
 =====================================
 
-[ ] 5-1 タグマスタCRUD
+[x] 5-1 タグマスタCRUD
+    ※完了(2026-09-24): daychi-review PASS(tags-crud E2E 6件・フルE2E 114 passed・unit 276 passed)
     内容: /admin/tags 一覧・作成・編集・削除(名前・表示順)。店舗に付いているタグの削除時は、確認ダイアログで
-          付いている店舗数を示し、削除時に全店舗の tagIds からそのタグを外す(2026-09-24決定)
+          付いている店舗数を示し、削除時に全店舗の tagIds からそのタグを外す(2026-09-24決定)。
+          同じ名前のタグは作成・名前変更とも不可(前後空白を除いて比較、重複時はエラー表示。2026-09-23決定)
     完了条件: E2E合格(CRUD一連操作、使用中タグの削除で店舗からも外れること)
+
+[ ] 5-1a E2E共有シード汚染の解消(P-018)
+    内容: e2e/admin-import-existing-shop.spec.ts が他テストと共有する seed店舗 shop-test-published-01 を
+          使わないようにする。このテスト専用の published 店舗(他テストが参照しない固定ID)を使い、
+          作成した訪問・動画の後片付けはテストが失敗しても実行される形(afterEach/finally等)にする。
+          「既存published店舗が承認で書き換えられない」という検証内容は維持する
+    完了条件: detail-sheet.spec.ts と admin-import-existing-shop.spec.ts を含むフルE2Eを連続3回実行して全緑。
+              typecheck / lint / test 全緑
 
 [ ] 5-2 店舗へのタグ付与UI
     内容: 店舗編集フォームにタグ複数選択UIを追加(shops.tagIds)。AI取り込みのレビュー画面の店舗カードでも

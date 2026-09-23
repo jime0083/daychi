@@ -36,6 +36,7 @@ import type { CreateVisitInput } from "../src/repositories/visits";
 import { FIRESTORE_EMULATOR_HOST, FIRESTORE_EMULATOR_PORT } from "../src/lib/firebase-config";
 import { type Performer, type PerformerData, performerConverter } from "../src/types/performer";
 import { type Shop, shopConverter } from "../src/types/shop";
+import { type Tag, type TagData, tagConverter } from "../src/types/tag";
 import { type Video, videoConverter } from "../src/types/video";
 import { type Visit, visitConverter } from "../src/types/visit";
 
@@ -49,6 +50,7 @@ type SeedPerformer = PerformerData & { id: string };
 type SeedVideo = CreateVideoInput & { id: string };
 type SeedShop = CreateShopInput & { id: string };
 type SeedVisit = CreateVisitInput & { id: string };
+type SeedTag = TagData & { id: string };
 
 // エミュレータ起動時、実Firebaseプロジェクトの構成値が無くても
 // initializeAppが失敗しないためのダミーprojectId
@@ -68,6 +70,14 @@ const performers: SeedPerformer[] = [
     isMain: false,
     order: 2,
   },
+];
+
+// タスク5-1(タグマスタCRUD)のE2E用タグ。shop-test-published-01に
+// tag-test-assignedを付与し、「使用中タグの削除」(店舗数の確認・削除時のカスケード解除)
+// のE2E検証データとして使う(2026-09-24決定: タグ削除時に付いている店舗数を示す)。
+const tags: SeedTag[] = [
+  { id: "tag-test-unused", name: "【テスト用】タグ(未使用)", order: 1 },
+  { id: "tag-test-assigned", name: "【テスト用】タグ(店舗紐付け)", order: 2 },
 ];
 
 const videos: SeedVideo[] = [
@@ -94,7 +104,7 @@ const shops: SeedShop[] = [
     infoAsOf: Timestamp.fromDate(new Date("2026-01-15T00:00:00+09:00")),
     location: { lat: 35.6938, lng: 139.7536 },
     closed: false,
-    tagIds: [],
+    tagIds: ["tag-test-assigned"],
     status: "published",
   },
   {
@@ -146,6 +156,13 @@ async function seedPerformers(db: SeedFirestore): Promise<void> {
       doc(db, "performers", performer.id).withConverter(performerConverter),
       performerDoc,
     );
+  }
+}
+
+async function seedTags(db: SeedFirestore): Promise<void> {
+  for (const tag of tags) {
+    const tagDoc: Tag = { id: tag.id, name: tag.name, order: tag.order };
+    await setDoc(doc(db, "tags", tag.id).withConverter(tagConverter), tagDoc);
   }
 }
 
@@ -216,6 +233,7 @@ async function main(): Promise<void> {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
       await seedPerformers(db);
+      await seedTags(db);
       await seedVideos(db, now);
       await seedShops(db, now);
       await seedVisits(db, now);
@@ -226,7 +244,7 @@ async function main(): Promise<void> {
 
   // CLIスクリプトの実行結果報告のための出力(アプリケーションコードのデバッグログではない)
   console.log(
-    `シード投入完了: performers=${performers.length}件, videos=${videos.length}件, shops=${shops.length}件, visits=${visits.length}件`,
+    `シード投入完了: performers=${performers.length}件, tags=${tags.length}件, videos=${videos.length}件, shops=${shops.length}件, visits=${visits.length}件`,
   );
 }
 
