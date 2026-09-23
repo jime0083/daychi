@@ -118,6 +118,22 @@ const shops: SeedShop[] = [
     tagIds: [],
     status: "draft",
   },
+  {
+    // e2e/admin-import-existing-shop.spec.ts(タスク4-4観点4)専用のpublished店舗。
+    // shop-test-published-01は他の多数のE2E(detail-sheet.spec.ts等)がその店舗に
+    // 紐づく訪問件数を厳密に検証するため、承認処理で訪問を追加するこのテストが
+    // 同じ店舗を使うとfullyParallel実行時に競合する(problem.txt P-018、
+    // progress.txtタスク5-1a)。このIDは他のE2E specから参照されない
+    id: "shop-test-published-import-01",
+    name: "【テスト用】喫茶テスト 取込専用公開店",
+    address: "東京都港区テスト町7-8-9",
+    businessHours: "7:00〜21:00(テストデータ)",
+    infoAsOf: Timestamp.fromDate(new Date("2026-01-20T00:00:00+09:00")),
+    location: { lat: 35.658, lng: 139.7016 },
+    closed: false,
+    tagIds: [],
+    status: "published",
+  },
 ];
 
 const visits: SeedVisit[] = [
