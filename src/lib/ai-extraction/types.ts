@@ -15,8 +15,14 @@
  * knownPerformerNames は performers コレクションに登録済みの出演者名一覧であり、
  * プロンプト内でAIに「この中から選ぶ」よう指示するために使う
  * (draft保存時の出演者名→performerId解決の精度を上げるため)。
+ *
+ * videoId(YouTube動画ID)は、requirements.md「5. AI自動抽出パイプライン」の
+ * 「抽出の入力(2026-09-23変更、P-015)」に対応する。Geminiアダプタはこの値から
+ * YouTube視聴URLを組み立て、動画そのものを入力(file_data)として渡す
+ * (Claudeアダプタは動画を直接入力できないため、videoIdはプロンプトには含めずテキストのみ使う)。
  */
 export interface ExtractionInput {
+  videoId: string;
   videoTitle: string;
   description: string;
   transcript: string | null;

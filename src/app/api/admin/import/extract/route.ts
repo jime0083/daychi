@@ -36,6 +36,21 @@ import { fetchVideoTextContent } from "@/lib/youtube-transcript";
 import { listPerformers } from "@/repositories/performers";
 import { listPublishedShops } from "@/repositories/shops";
 
+/**
+ * タスク4-3c(P-015対応): 動画入力方式への変更により、Gemini呼び出しは
+ * 数十秒〜数分かかりうる(problem.txt P-015: 33分動画で約27秒、リトライが発生すれば
+ * さらに数十秒加算される)。Next.jsのRoute Segment Config
+ * (https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config#maxduration)
+ * でこのRoute Handlerの最大実行時間を明示的に延ばす(既定は5分。将来さらに長い動画・
+ * リトライが重なるケースに備え余裕を持たせる)。
+ *
+ * 本番(Firebase App Hosting = Cloud Run)側の扱い: maxDurationはNext.js自身のタイムアウトの
+ * 目安であり、Cloud Runのリクエストタイムアウト(apphosting.yamlのrunConfig、既定300秒)が
+ * より短ければそちらが先に効く。apphosting.yamlの変更はタスク4-5(実API通し確認)で
+ * 実動画の所要時間を見て必要なら行う(現時点ではコード変更に留める)。
+ */
+export const maxDuration = 300;
+
 interface ExtractErrorResponse {
   error: string;
 }

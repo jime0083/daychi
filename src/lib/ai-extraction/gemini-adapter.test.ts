@@ -27,6 +27,7 @@ function makeEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): NodeJS.ProcessEnv 
 }
 
 const SAMPLE_INPUT: ExtractionInput = {
+  videoId: "abcdefghijk",
   videoTitle: "世田谷の名店に行ってみた",
   description: "概要欄のテキストです",
   transcript: "字幕テキストです",
@@ -107,11 +108,12 @@ describe("createGeminiExtractionProvider", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("Gemini APIがエラーステータスを返した場合はErrorをthrowする", async () => {
+  it("Gemini APIがエラーステータスを返した場合はErrorをthrowする(maxRetries:0でリトライなし)", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({}, { status: 500 }));
-    const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl });
+    const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, maxRetries: 0 });
 
     await expect(provider.extract(SAMPLE_INPUT)).rejects.toThrow("status: 500");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("応答にテキストが含まれない場合はErrorをthrowする", async () => {
@@ -135,5 +137,105 @@ describe("createGeminiExtractionProvider", () => {
     const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl });
 
     await expect(provider.extract(SAMPLE_INPUT)).rejects.toThrow("AI応答のスキーマが不正です");
+  });
+
+  describe("動画入力方式(タスク4-3c, P-015対応)", () => {
+    it("contentsに動画パート(file_data.file_uri=正しいYouTube視聴URL)とテキストパートを渡す", async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl });
+
+      await provider.extract(SAMPLE_INPUT);
+
+      const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(init.body as string) as {
+        contents?: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+      };
+      const parts = body.contents?.[0]?.parts ?? [];
+      expect(parts[0]).toEqual({
+        file_data: { file_uri: `https://www.youtube.com/watch?v=${SAMPLE_INPUT.videoId}` },
+      });
+      expect(typeof parts[1]?.text).toBe("string");
+    });
+
+    it("generationConfig.mediaResolutionにMEDIA_RESOLUTION_LOWを指定する", async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl });
+
+      await provider.extract(SAMPLE_INPUT);
+
+      const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(init.body as string) as {
+        generationConfig?: { mediaResolution?: string };
+      };
+      expect(body.generationConfig?.mediaResolution).toBe("MEDIA_RESOLUTION_LOW");
+    });
+  });
+
+  describe("一時的エラーのリトライ(タスク4-3c, P-015対応)", () => {
+    it("503が1回発生しても指数バックオフでリトライして最終的に成功する", async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(jsonResponse({}, { status: 503 }))
+        .mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, waitImpl });
+
+      const result = await provider.extract(SAMPLE_INPUT);
+
+      expect(result).toEqual(JSON.parse(SAMPLE_EXTRACTION_JSON));
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(waitImpl).toHaveBeenCalledTimes(1);
+      expect(waitImpl).toHaveBeenCalledWith(1000);
+    });
+
+    it("503がmaxRetries回を超えて続く場合は最終的にErrorをthrowする(実時間は待たない)", async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}, { status: 503 }));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({
+        apiKey: "test-key",
+        fetchImpl,
+        waitImpl,
+        maxRetries: 3,
+      });
+
+      await expect(provider.extract(SAMPLE_INPUT)).rejects.toThrow("status: 503");
+      // 初回 + リトライ3回 = 4回呼ばれる
+      expect(fetchImpl).toHaveBeenCalledTimes(4);
+      expect(waitImpl).toHaveBeenCalledTimes(3);
+    });
+
+    it("429/500/502/504も一時的エラーとしてリトライ対象になる", async () => {
+      for (const status of [429, 500, 502, 504]) {
+        const fetchImpl = vi
+          .fn<typeof fetch>()
+          .mockResolvedValueOnce(jsonResponse({}, { status }))
+          .mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+        const waitImpl = vi.fn().mockResolvedValue(undefined);
+        const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, waitImpl });
+
+        await expect(provider.extract(SAMPLE_INPUT)).resolves.toEqual(JSON.parse(SAMPLE_EXTRACTION_JSON));
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+      }
+    });
+
+    it("400はリトライせず即座にErrorをthrowする", async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({}, { status: 400 }));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, waitImpl });
+
+      await expect(provider.extract(SAMPLE_INPUT)).rejects.toThrow("status: 400");
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(waitImpl).not.toHaveBeenCalled();
+    });
+
+    it("401/403もリトライせず即座にErrorをthrowする", async () => {
+      for (const status of [401, 403]) {
+        const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({}, { status }));
+        const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl });
+
+        await expect(provider.extract(SAMPLE_INPUT)).rejects.toThrow(`status: ${status}`);
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+      }
+    });
   });
 });

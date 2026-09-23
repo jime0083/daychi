@@ -76,6 +76,7 @@ export interface BuildDraftPlanFromVideoInput {
  */
 export async function buildDraftPlanFromVideo(input: BuildDraftPlanFromVideoInput): Promise<DraftSavePlan> {
   const extraction = await input.provider.extract({
+    videoId: input.video.videoId,
     videoTitle: input.video.title,
     description: input.textContent.description,
     transcript: input.textContent.transcript,

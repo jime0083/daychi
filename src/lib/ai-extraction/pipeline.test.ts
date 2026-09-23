@@ -83,6 +83,7 @@ describe("buildDraftPlanFromVideo", () => {
     });
 
     expect(extractMock).toHaveBeenCalledWith({
+      videoId: "video-1",
       videoTitle: "新しい動画",
       description: "概要欄です",
       transcript: "字幕です",

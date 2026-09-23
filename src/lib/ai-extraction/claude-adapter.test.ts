@@ -15,6 +15,7 @@ import {
 import type { ExtractionInput } from "@/lib/ai-extraction/types";
 
 const SAMPLE_INPUT: ExtractionInput = {
+  videoId: "abcdefghijk",
   videoTitle: "世田谷の名店に行ってみた",
   description: "概要欄のテキストです",
   transcript: "字幕テキストです",
@@ -64,6 +65,27 @@ describe("createClaudeExtractionProvider", () => {
     expect(params.output_config.format.type).toBe("json_schema");
     // アシスタントのprefillを使わない(userメッセージのみ送る)
     expect(params.messages).toEqual([{ role: "user", content: expect.any(String) }]);
+  });
+
+  it("動画は渡さずテキスト(タイトル+概要欄+字幕)のみ送る(タスク4-3c, P-015対応)", async () => {
+    const client = makeClient({
+      content: [{ type: "text", text: SAMPLE_EXTRACTION_JSON }],
+      stop_reason: "end_turn",
+    });
+    const provider = createClaudeExtractionProvider({ apiKey: "test-key", client });
+
+    await provider.extract(SAMPLE_INPUT);
+
+    const params = client.create.mock.calls[0]?.[0];
+    // messagesはuserのテキストメッセージ1件のみ(file_data等の動画パートを持つ余地がない形)
+    expect(params.messages).toHaveLength(1);
+    expect(params.messages[0].role).toBe("user");
+    expect(typeof params.messages[0].content).toBe("string");
+    const content = params.messages[0].content as string;
+    // 送信テキストにvideoId(YouTube動画ID)が含まれない(=動画情報として送っていない)ことを確認する
+    expect(content).not.toContain(SAMPLE_INPUT.videoId);
+    expect(content).toContain(SAMPLE_INPUT.videoTitle);
+    expect(content).toContain(SAMPLE_INPUT.description);
   });
 
   it("apiKeyを環境変数(CLAUDE_API_KEY)から解決できる(clientは指定されているため呼ばれない)", async () => {

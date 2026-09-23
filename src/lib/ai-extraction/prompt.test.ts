@@ -8,6 +8,7 @@ import { buildExtractionPrompt } from "@/lib/ai-extraction/prompt";
 import type { ExtractionInput } from "@/lib/ai-extraction/types";
 
 const SAMPLE_INPUT: ExtractionInput = {
+  videoId: "abcdefghijk",
   videoTitle: "世田谷の名店に行ってみた",
   description: "概要欄のテキストです",
   transcript: "字幕テキストです",
@@ -37,5 +38,12 @@ describe("buildExtractionPrompt", () => {
     expect(prompt).toContain(SAMPLE_INPUT.videoTitle);
     expect(prompt).toContain(SAMPLE_INPUT.description);
     expect(prompt).toContain("だいち、ゲストA");
+  });
+
+  it("動画そのものを視聴できる場合は動画内で映っている・話されている内容を根拠にするよう指示する(タスク4-3c, P-015対応)", () => {
+    const prompt = buildExtractionPrompt(SAMPLE_INPUT);
+
+    expect(prompt).toMatch(/動画そのものを視聴できる場合は、動画内で実際に映っている・話されている内容を根拠にしてください/);
+    expect(prompt).toMatch(/動画を視聴できない場合は、動画タイトル・概要欄・字幕\(本文\)に明記された内容のみを根拠にしてください/);
   });
 });

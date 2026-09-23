@@ -22,6 +22,11 @@
  * 秘密情報(YOUTUBE_API_KEY・GEMINI_API_KEY)を要する処理はすべて
  * サーバー側(/api/admin/import/*)で行い、このページはFirestoreへの書き込みのみ
  * 自身の管理者セッション(useAdminAuth)で行う(route.tsのコメント参照)。
+ *
+ * タスク4-3c(P-015対応): Gemini抽出が動画入力方式になったことで1本あたり
+ * 数十秒〜数分かかる(problem.txt P-015)。取り込み中は「何本目を処理中か・
+ * 処理中の動画タイトル」とスピナーを表示し(progress state)、「取り込み実行」
+ * ボタンは running 中は disabled にして二重実行を防ぐ(既存のdisabled条件を維持)。
  */
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -40,6 +45,13 @@ interface ImportResult {
   message?: string;
 }
 
+/** 現在処理中の動画(何本目/全何本・タイトル)。取り込み中の進捗表示に使う(タスク4-3c) */
+interface ImportProgress {
+  index: number;
+  total: number;
+  title: string;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -54,6 +66,7 @@ export default function AdminImportPage() {
 
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<ImportResult[]>([]);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -149,9 +162,13 @@ export default function AdminImportPage() {
 
     setRunning(true);
     setResults([]);
+    setProgress(null);
     const nextResults: ImportResult[] = [];
 
-    for (const video of targets) {
+    for (const [i, video] of targets.entries()) {
+      if (mountedRef.current) {
+        setProgress({ index: i + 1, total: targets.length, title: video.title });
+      }
       try {
         const idToken = await authStatus.user.getIdToken();
         const plan = await fetchExtractionPlan(idToken, {
@@ -175,6 +192,7 @@ export default function AdminImportPage() {
     }
 
     if (mountedRef.current) {
+      setProgress(null);
       setRunning(false);
     }
     await reloadUnregisteredVideos();
@@ -194,7 +212,7 @@ export default function AdminImportPage() {
         <button
           type="button"
           data-testid="import-reload"
-          disabled={loadingList}
+          disabled={loadingList || running}
           onClick={() => {
             void reloadUnregisteredVideos();
           }}
@@ -214,6 +232,28 @@ export default function AdminImportPage() {
           {running ? "取り込み中..." : `取り込み実行(${selectedIds.size}件選択中)`}
         </button>
       </div>
+
+      {running && (
+        <div
+          data-testid="import-progress"
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
+        >
+          <span
+            data-testid="import-progress-spinner"
+            aria-hidden="true"
+            className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-50"
+          />
+          {progress !== null ? (
+            <span>
+              {progress.index}/{progress.total}本目を処理中: {progress.title}
+            </span>
+          ) : (
+            <span>取り込みの準備をしています...</span>
+          )}
+        </div>
+      )}
 
       {listError !== null && (
         <p data-testid="import-list-error" className="text-sm text-red-600 dark:text-red-400">
