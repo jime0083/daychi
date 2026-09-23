@@ -333,7 +333,9 @@ Phase 4: AI自動抽出
               retryDelay上限90秒)とE2E(1日上限で残りの処理が中止され理由が表示される。APIはモック)が通る。
               typecheck / lint / test / e2e 全緑。実APIは使わない(本日の無料枠は使い切り済み)
 
-[ ] 4-5 実API通し確認(Gemini)
+[x] 4-5 実API通し確認(Gemini)
+    ※完了(2026-09-23): 本番で動画UdP157QNnZg「arvo coffee」を取り込み→レビュー→承認→公開。daychi-review 本番読み取り専用スモークPASS
+      (ピン表示・動画フォーカス・詳細シート全項目・筋金の非破壊・未認証401、PC/モバイル)
     ※開始前確認: manual-work W6(YouTube APIキー)・W7(Gemini APIキー)完了必須
     内容: 実際のYouTube Data API・**Gemini API**を使い、実動画1本を取り込み→
           レビュー→承認→本番公開まで通しで実行(Claudeアダプタは実行しない=保留)
