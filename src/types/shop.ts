@@ -25,6 +25,12 @@ export interface ShopData {
   closed: boolean;
   /** Phase 5で使用するタグID一覧 */
   tagIds: string[];
+  /**
+   * AI抽出の下書きで座標未確定(住所からジオコードできなかった)なら false。
+   * 未設定の場合は確定済み扱い。false の間はレビュー画面で管理者がピンを置いて
+   * 確定させるまで承認(published化)できない(requirements.md 2026-09-23決定)。
+   */
+  locationConfirmed?: boolean;
   status: PublishStatus;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -46,6 +52,9 @@ export const shopConverter: FirestoreDataConverter<Shop, ShopData> = {
       location: shop.location,
       closed: shop.closed,
       tagIds: shop.tagIds,
+      // Firestoreはundefined値のフィールドを書き込めないため、未設定(確定済み扱い)の
+      // 場合はキー自体を含めない。
+      ...(shop.locationConfirmed !== undefined ? { locationConfirmed: shop.locationConfirmed } : {}),
       status: shop.status,
       createdAt: shop.createdAt,
       updatedAt: shop.updatedAt,
@@ -62,6 +71,7 @@ export const shopConverter: FirestoreDataConverter<Shop, ShopData> = {
       location: data.location,
       closed: data.closed,
       tagIds: data.tagIds,
+      locationConfirmed: data.locationConfirmed,
       status: data.status,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,

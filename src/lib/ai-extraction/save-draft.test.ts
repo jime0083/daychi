@@ -10,11 +10,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DraftSavePlan } from "@/lib/ai-extraction/draft-plan";
 
 const createShopMock = vi.fn();
+const updateShopMock = vi.fn();
 const createVideoMock = vi.fn();
 const createVisitMock = vi.fn();
 
 vi.mock("@/repositories/shops", () => ({
   createShop: (...args: unknown[]) => createShopMock(...args),
+  updateShop: (...args: unknown[]) => updateShopMock(...args),
 }));
 vi.mock("@/repositories/videos", () => ({
   createVideo: (...args: unknown[]) => createVideoMock(...args),
@@ -33,6 +35,7 @@ const now = Timestamp.now();
 describe("saveDraftExtraction", () => {
   beforeEach(() => {
     createShopMock.mockReset();
+    updateShopMock.mockReset();
     createVideoMock.mockReset();
     createVisitMock.mockReset();
     createVideoMock.mockImplementation(async (videoId: string, data: unknown) => ({
@@ -86,6 +89,8 @@ describe("saveDraftExtraction", () => {
         status: "draft",
       }),
     );
+    // ジオコード成功時はlocationConfirmedを付けない(未設定=確定済み扱い)
+    expect(createShopMock.mock.calls[0][0]).not.toHaveProperty("locationConfirmed");
     expect(createVisitMock).toHaveBeenCalledWith(
       expect.objectContaining({
         shopId: "new-shop-id",
@@ -102,7 +107,7 @@ describe("saveDraftExtraction", () => {
     });
   });
 
-  it("重複店舗の場合は新規作成せず既存shopIdを使い回す", async () => {
+  it("重複店舗の場合は新規作成せず既存shopIdを使い回し、既存店舗のlocationConfirmedを変更しない", async () => {
     const saveDraftExtraction = await importSaveDraftExtraction();
     const plan: DraftSavePlan = {
       status: "draft",
@@ -122,13 +127,16 @@ describe("saveDraftExtraction", () => {
     const result = await saveDraftExtraction(plan);
 
     expect(createShopMock).not.toHaveBeenCalled();
+    // 重複店舗は既存shopIdを使い回すのみで、既存店舗への書き込み(updateShop)は一切行わない
+    // (locationConfirmedを含め既存店舗のフィールドを上書きしないことの担保)
+    expect(updateShopMock).not.toHaveBeenCalled();
     expect(createVisitMock).toHaveBeenCalledWith(
       expect.objectContaining({ shopId: "existing-shop-id" }),
     );
     expect(result.shopIds).toEqual(["existing-shop-id"]);
   });
 
-  it("出演者マスタに解決できないconsumptionは保存対象から除外し、unresolvedPerformerNamesに含める", async () => {
+  it("出演者マスタに解決できないconsumptionはunresolvedConsumptionsに保存し、解決できた分はconsumptionsに入れる(混在ケース)", async () => {
     const saveDraftExtraction = await importSaveDraftExtraction();
     const plan: DraftSavePlan = {
       status: "draft",
@@ -156,12 +164,42 @@ describe("saveDraftExtraction", () => {
     const result = await saveDraftExtraction(plan);
 
     expect(createVisitMock).toHaveBeenCalledWith(
-      expect.objectContaining({ consumptions: [{ performerId: "performer-1", items: ["コーヒー"] }] }),
+      expect.objectContaining({
+        consumptions: [{ performerId: "performer-1", items: ["コーヒー"] }],
+        unresolvedConsumptions: [{ performerName: "未登録ゲスト", items: ["紅茶"] }],
+      }),
     );
     expect(result.unresolvedPerformerNames).toEqual(["未登録ゲスト"]);
   });
 
-  it("住所候補・ジオコードが無い店舗にはプレースホルダ座標(0,0)を設定する", async () => {
+  it("未登録出演者が1人もいない訪問ではunresolvedConsumptionsキー自体を付けない", async () => {
+    const saveDraftExtraction = await importSaveDraftExtraction();
+    const plan: DraftSavePlan = {
+      status: "draft",
+      video: { videoId: "video-3b", title: "動画", publishedAt: "2026-01-03T00:00:00Z" },
+      shops: [
+        {
+          name: "新規の喫茶店2",
+          addressCandidate: null,
+          location: null,
+          isDuplicate: false,
+          existingShopId: null,
+        },
+      ],
+      visits: [
+        {
+          shopIndex: 0,
+          consumptions: [{ performerId: "performer-1", performerName: "だいち", items: ["コーヒー"] }],
+        },
+      ],
+    };
+
+    await saveDraftExtraction(plan);
+
+    expect(createVisitMock.mock.calls[0][0]).not.toHaveProperty("unresolvedConsumptions");
+  });
+
+  it("住所候補・ジオコードが無い店舗にはプレースホルダ座標(0,0)とlocationConfirmed=falseを設定する", async () => {
     const saveDraftExtraction = await importSaveDraftExtraction();
     const plan: DraftSavePlan = {
       status: "draft",
@@ -175,7 +213,31 @@ describe("saveDraftExtraction", () => {
     await saveDraftExtraction(plan);
 
     expect(createShopMock).toHaveBeenCalledWith(
-      expect.objectContaining({ location: { lat: 0, lng: 0 }, address: "" }),
+      expect.objectContaining({ location: { lat: 0, lng: 0 }, address: "", locationConfirmed: false }),
+    );
+  });
+
+  it("ジオコーディングに失敗した店舗(住所候補はあるがlocationがnull)もlocationConfirmed=falseにする", async () => {
+    const saveDraftExtraction = await importSaveDraftExtraction();
+    const plan: DraftSavePlan = {
+      status: "draft",
+      video: { videoId: "video-5", title: "動画", publishedAt: "2026-01-05T00:00:00Z" },
+      shops: [
+        {
+          name: "ジオコード失敗の店",
+          addressCandidate: "存在しない住所999-999",
+          location: null,
+          isDuplicate: false,
+          existingShopId: null,
+        },
+      ],
+      visits: [{ shopIndex: 0, consumptions: [] }],
+    };
+
+    await saveDraftExtraction(plan);
+
+    expect(createShopMock).toHaveBeenCalledWith(
+      expect.objectContaining({ location: { lat: 0, lng: 0 }, locationConfirmed: false }),
     );
   });
 });
