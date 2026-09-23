@@ -6,7 +6,10 @@
  *
  * Gemini REST API(generativelanguage v1beta の :generateContent)をfetchで直接呼び出す
  * (SDK不要)。JSON出力を強制するため responseMimeType: "application/json" と
- * 共通スキーマ(EXTRACTION_JSON_SCHEMA)を responseSchema として渡す。
+ * 共通スキーマ(EXTRACTION_JSON_SCHEMA)を responseJsonSchema として渡す。
+ * (Gemini独自形式の responseSchema は addressCandidate の type: ["string","null"] のような
+ * 型の配列を受け付けず400になるため使わない。JSON Schema形式をそのまま渡せる
+ * responseJsonSchema を使う。problem.txt P-014参照、実APIで解消を確認済み)
  *
  * サーバー専用モジュール(NEXT_PUBLIC_ は使わない)。
  * - APIキー: 環境変数 GEMINI_API_KEY を `x-goog-api-key` ヘッダーで送る
@@ -113,7 +116,7 @@ export function createGeminiExtractionProvider(
         contents: [{ role: "user", parts: [{ text: buildExtractionPrompt(input) }] }],
         generationConfig: {
           responseMimeType: "application/json",
-          responseSchema: EXTRACTION_JSON_SCHEMA,
+          responseJsonSchema: EXTRACTION_JSON_SCHEMA,
         },
       };
 

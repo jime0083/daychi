@@ -8,6 +8,7 @@ import {
   DEFAULT_GEMINI_MODEL,
   createGeminiExtractionProvider,
 } from "@/lib/ai-extraction/gemini-adapter";
+import { EXTRACTION_JSON_SCHEMA } from "@/lib/ai-extraction/schema";
 import type { ExtractionInput } from "@/lib/ai-extraction/types";
 
 function jsonResponse(body: unknown, init?: { status?: number }): Response {
@@ -58,8 +59,31 @@ describe("createGeminiExtractionProvider", () => {
     const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
     expect(url).toContain(`models/${DEFAULT_GEMINI_MODEL}:generateContent`);
     expect((init.headers as Record<string, string>)["x-goog-api-key"]).toBe("test-key");
-    const body = JSON.parse(init.body as string) as { generationConfig?: { responseMimeType?: string } };
+    const body = JSON.parse(init.body as string) as {
+      generationConfig?: {
+        responseMimeType?: string;
+        responseJsonSchema?: unknown;
+        responseSchema?: unknown;
+      };
+    };
     expect(body.generationConfig?.responseMimeType).toBe("application/json");
+  });
+
+  it("スキーマは generationConfig.responseJsonSchema で渡し、responseSchema は使わない(P-014対応)", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+    const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl });
+
+    await provider.extract(SAMPLE_INPUT);
+
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as {
+      generationConfig?: {
+        responseJsonSchema?: unknown;
+        responseSchema?: unknown;
+      };
+    };
+    expect(body.generationConfig?.responseJsonSchema).toEqual(EXTRACTION_JSON_SCHEMA);
+    expect(body.generationConfig?.responseSchema).toBeUndefined();
   });
 
   it("apiKeyを環境変数(GEMINI_API_KEY)から解決できる", async () => {
