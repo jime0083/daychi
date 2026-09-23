@@ -30,79 +30,24 @@
  * customAttributes.adminを確認)を使って検証する。トークンが無い場合は401、
  * トークンはあるが管理者クレームが無い/無効な場合は403を返す
  * (E2E: e2e/geocode-auth.spec.ts参照)。
+ *
+ * GSI呼び出し自体(URL・User-Agent・座標変換)はタスク4-3で src/lib/geocode.ts に
+ * 切り出し、AI抽出パイプライン(draft保存)と共用している。このRoute Handlerの
+ * 挙動(認可・HTTPステータス・エラーメッセージ)は変更していない。
  */
 import { NextResponse } from "next/server";
 
 import { extractBearerToken, verifyAdminIdToken } from "@/lib/admin-token";
+import { geocodeWithGsi, type GeocodeResult } from "@/lib/geocode";
 
-interface GeocodeSuccessResponse {
-  lat: number;
-  lng: number;
-  displayName?: string;
-}
+type GeocodeSuccessResponse = GeocodeResult;
 
 interface GeocodeErrorResponse {
   error: string;
 }
 
-/**
- * 国土地理院(GSI) AddressSearch APIのレスポンス形式(GeoJSON Feature配列)。
- * geometry.coordinates は [経度(lng), 緯度(lat)] の順(GeoJSON順)であり、
- * 一般的な「緯度・経度」の順序とは逆であることに注意する(取り違え注意)。
- */
-interface GsiAddressSearchFeature {
-  geometry?: {
-    coordinates?: [number, number];
-  };
-  properties?: {
-    title?: string;
-  };
-}
-
-/**
- * 問い合わせ元を特定できる説明的なUser-Agentを付与する(GSI・Nominatim共通のマナー)。
- */
-const GEOCODE_USER_AGENT = "DaychiCoffeeMap/1.0 (admin geocoding)";
-
 const GSI_NOT_FOUND_ERROR =
   "住所から座標が見つかりませんでした。住所を確認するか、地図をクリックして指定してください";
-
-/**
- * 国土地理院(GSI) AddressSearchで住所をジオコーディングする。
- * 成功時は {lat, lng, displayName} を返す。見つからない場合(空配列)はnullを返し、
- * 通信失敗・応答不正の場合はErrorをthrowする(呼び出し側で502として扱う)。
- */
-async function geocodeWithGsi(address: string): Promise<GeocodeSuccessResponse | null> {
-  const gsiUrl = `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(address)}`;
-
-  let gsiResponse: Response;
-  try {
-    gsiResponse = await fetch(gsiUrl, {
-      headers: { "User-Agent": GEOCODE_USER_AGENT },
-    });
-  } catch {
-    throw new Error("ジオコーディングAPIへの接続に失敗しました");
-  }
-
-  if (!gsiResponse.ok) {
-    throw new Error(`ジオコーディングAPIがエラーを返しました(status: ${gsiResponse.status})`);
-  }
-
-  const features = (await gsiResponse.json()) as GsiAddressSearchFeature[];
-  const first = features[0];
-  const coordinates = first?.geometry?.coordinates;
-  if (coordinates === undefined) {
-    return null;
-  }
-
-  // GeoJSON順([lng, lat])から {lat, lng} へ変換する(座標順の取り違えに注意)。
-  const [lng, lat] = coordinates;
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    throw new Error("ジオコーディングAPIの応答が不正です");
-  }
-
-  return { lat, lng, displayName: first?.properties?.title };
-}
 
 export async function GET(
   request: Request,
