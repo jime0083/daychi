@@ -66,3 +66,24 @@ env:
     availability:
       - BUILD
       - RUNTIME
+
+  # サーバー専用の秘密情報(Cloud Secret Manager参照)。
+  # クライアントに漏れないようNEXT_PUBLIC_を付けず、ビルド成果物にも含めない(RUNTIMEのみ)。
+  # 参照先のシークレット(YOUTUBE_API_KEY・GEMINI_API_KEY)はSecret Managerに作成済みで、
+  # App Hostingバックエンドに読み取り権限を付与済み(manual-work W6/W7)
+  - variable: YOUTUBE_API_KEY
+    secret: YOUTUBE_API_KEY
+    availability:
+      - RUNTIME
+
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
+    availability:
+      - RUNTIME
+
+  # AI抽出プロバイダの既定値を明示(未設定でもコード側の既定はgeminiだが、
+  # 本番設定として明示しておく)
+  - variable: AI_PROVIDER
+    value: "gemini"
+    availability:
+      - RUNTIME
