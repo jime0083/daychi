@@ -283,7 +283,7 @@ Phase 4: AI自動抽出
           E2Eでは抽出API層をモックしdraftデータで検証
     完了条件: E2E合格(draftの修正→承認→公開ページに表示される一連フロー)
 
-[ ] 4-3b Geminiのスキーマ指定修正と住所の作り出し防止(P-014対応)
+[x] 4-3b Geminiのスキーマ指定修正と住所の作り出し防止(P-014対応) (2026-09-23 レビューPASS。実APIで400解消・住所作り出しなしを確認)
     内容: gemini-adapter.ts で generationConfig.responseSchema を responseJsonSchema に変更する
           (共通スキーマのJSON Schema形式のまま渡せる。実APIで400解消を確認済みの形)。
           あわせて共通プロンプト(prompt.ts)で「本文(概要欄・字幕・タイトル)に明記された住所だけを

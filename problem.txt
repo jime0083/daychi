@@ -414,7 +414,7 @@
 
 ## P-014: 実APIでGemini抽出が400エラーになる
 - 記録日: 2026-09-23
-- 状態: 修正中
+- 状態: 解決済み
 - 発生箇所: src/lib/ai-extraction/gemini-adapter.ts(タスク4-5のローカル試運転で発覚)
 - 問題内容:
   想定した動き: 実際のGemini API(gemini-3.6-flash)で概要欄から店舗情報をJSON抽出できる
@@ -435,5 +435,9 @@
   Geminiの responseSchema(独自形式)に JSON Schema 形式のスキーマを渡していたこと。
   テストがモックのみでリクエスト形式を実APIに照らして検証していなかったこと
 - 切り出したタスク: progress.txt タスク4-3b(Geminiのスキーマ指定修正と住所の作り出し防止)
-- 解決日:
+- 解決日: 2026-09-23
 - 解決内容:
+  gemini-adapter.ts を responseJsonSchema で送る形に変更し、prompt.ts に本文に無い住所・情報を作らない指示を追加
+  (コミット 9ed9b31)。実APIで S41iyTw1_dg の抽出が400にならず成功、住所の無い本文で3回とも
+  addressCandidate=null を確認(レビューPASS)。※実動画は概要欄に住所・メニューが無く字幕も取れないため
+  店名しか抽出できない点は別問題として P-015 で扱う
