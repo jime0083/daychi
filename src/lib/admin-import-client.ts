@@ -11,7 +11,14 @@
  * src/lib/ai-extraction/draft-plan.ts)を参照する。`import type` はコンパイル時に
  * 完全に消去されるため、これらのモジュール本体(YOUTUBE_API_KEY・GEMINI_API_KEYに
  * 依存するコード)がブラウザ向けバンドルに含まれることはない。
+ *
+ * タスク4-3e(P-017対応): src/lib/ai-extraction/errors.ts は秘密情報を持たない
+ * 値のみのモジュールのため、通常のimport(型消去されない)で参照してよい。
+ * /api/admin/import/extract が429 + { error: { code: "GEMINI_DAILY_QUOTA_EXCEEDED", ... } }
+ * を返した場合、呼び出し元(/admin/import)が種別を判別できるよう
+ * GeminiDailyQuotaExceededError をthrowする。
  */
+import { GEMINI_DAILY_QUOTA_EXCEEDED_CODE, GeminiDailyQuotaExceededError } from "@/lib/ai-extraction/errors";
 import type { DraftSavePlan } from "@/lib/ai-extraction/draft-plan";
 import type { ChannelVideoSummary } from "@/lib/youtube-data-api";
 
@@ -50,8 +57,13 @@ export interface ExtractVideoInput {
   publishedAt: string;
 }
 
+interface ExtractApiErrorBody {
+  code?: string;
+  message?: string;
+}
+
 interface ExtractApiResponse extends Partial<DraftSavePlan> {
-  error?: string;
+  error?: string | ExtractApiErrorBody;
 }
 
 /**
@@ -59,6 +71,11 @@ interface ExtractApiResponse extends Partial<DraftSavePlan> {
  * 戻り値(DraftSavePlan)は src/lib/ai-extraction/save-draft.ts の
  * saveDraftExtraction() にそのまま渡してFirestoreへ保存する想定
  * (このモジュール自体はFirestoreへの書き込みを行わない)。
+ *
+ * タスク4-3e(P-017対応): Gemini無料枠の1日上限に達した場合(429 +
+ * error.code === "GEMINI_DAILY_QUOTA_EXCEEDED")は、通常のErrorではなく
+ * GeminiDailyQuotaExceededError をthrowする。呼び出し元(/admin/import)はこれを
+ * instanceofで判別し、残りの選択動画の処理を中止する
  */
 export async function fetchExtractionPlan(
   idToken: string,
@@ -78,7 +95,14 @@ export async function fetchExtractionPlan(
     body.shops === undefined ||
     body.visits === undefined
   ) {
-    throw new Error(body.error ?? `AI抽出に失敗しました(status: ${response.status})`);
+    const errorBody = body.error;
+    if (typeof errorBody === "object" && errorBody !== null && errorBody.code === GEMINI_DAILY_QUOTA_EXCEEDED_CODE) {
+      throw new GeminiDailyQuotaExceededError(
+        errorBody.message ?? "本日のGemini無料枠を使い切りました。日本時間16時ごろ以降に再実行してください",
+      );
+    }
+    const message = typeof errorBody === "string" ? errorBody : errorBody?.message;
+    throw new Error(message ?? `AI抽出に失敗しました(status: ${response.status})`);
   }
 
   return { status: body.status, video: body.video, shops: body.shops, visits: body.visits };

@@ -27,11 +27,18 @@
  * 数十秒〜数分かかる(problem.txt P-015)。取り込み中は「何本目を処理中か・
  * 処理中の動画タイトル」とスピナーを表示し(progress state)、「取り込み実行」
  * ボタンは running 中は disabled にして二重実行を防ぐ(既存のdisabled条件を維持)。
+ *
+ * タスク4-3e(P-017対応): Gemini無料枠の1日上限に達すると、その日は再試行しても
+ * 回復しないため、fetchExtractionPlanがGeminiDailyQuotaExceededErrorをthrowした
+ * 時点で残りの選択動画の処理を中止し(以降は無駄にリクエストしない)、理由を
+ * data-testid="import-quota-exceeded" の目立つ表示で伝える。それまでに成功した
+ * 動画の結果(results)はそのまま表示を維持する。
  */
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchExtractionPlan, fetchUnregisteredVideos } from "@/lib/admin-import-client";
+import { GeminiDailyQuotaExceededError } from "@/lib/ai-extraction/errors";
 import { saveDraftExtraction } from "@/lib/ai-extraction/save-draft";
 import { useAdminAuth } from "@/lib/admin-auth";
 import { buildYoutubeThumbnailUrl } from "@/lib/youtube";
@@ -67,6 +74,7 @@ export default function AdminImportPage() {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<ImportResult[]>([]);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
+  const [quotaExceededMessage, setQuotaExceededMessage] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -163,7 +171,11 @@ export default function AdminImportPage() {
     setRunning(true);
     setResults([]);
     setProgress(null);
+    setQuotaExceededMessage(null);
     const nextResults: ImportResult[] = [];
+    // タスク4-3e(P-017対応): 1日上限のエラーを受けた時点で、残りの選択動画の
+    // 処理を中止する(以降の動画で無駄にリクエストしないため)
+    let quotaExceeded: string | null = null;
 
     for (const [i, video] of targets.entries()) {
       if (mountedRef.current) {
@@ -185,15 +197,22 @@ export default function AdminImportPage() {
           status: "error",
           message: errorMessage(error),
         });
+        if (error instanceof GeminiDailyQuotaExceededError) {
+          quotaExceeded = error.message;
+        }
       }
       if (mountedRef.current) {
         setResults([...nextResults]);
+      }
+      if (quotaExceeded !== null) {
+        break;
       }
     }
 
     if (mountedRef.current) {
       setProgress(null);
       setRunning(false);
+      setQuotaExceededMessage(quotaExceeded);
     }
     await reloadUnregisteredVideos();
   }
@@ -252,6 +271,19 @@ export default function AdminImportPage() {
           ) : (
             <span>取り込みの準備をしています...</span>
           )}
+        </div>
+      )}
+
+      {quotaExceededMessage !== null && (
+        <div
+          data-testid="import-quota-exceeded"
+          role="alert"
+          className="rounded border border-amber-400 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-100"
+        >
+          <p className="font-semibold">
+            Geminiの利用上限に達したため、残りの動画の取り込みを中止しました
+          </p>
+          <p>{quotaExceededMessage}</p>
         </div>
       )}
 

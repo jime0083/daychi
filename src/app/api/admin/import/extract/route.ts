@@ -25,12 +25,19 @@
  *
  * 認可: /api/admin/oembed・/api/admin/geocode と同じパターン
  * (src/lib/admin-token.ts。未認証401・非admin403)。
+ *
+ * タスク4-3e(P-017対応): Geminiの1日上限(RPD)に達した場合、gemini-adapter.tsは
+ * 通常のエラー(502)と区別できる専用エラー GeminiDailyQuotaExceededError をthrowする。
+ * 本ルートはこれを捕捉し、クライアント(取り込み画面)が種別を判別できるよう
+ * HTTP 429 + { error: { code: "GEMINI_DAILY_QUOTA_EXCEEDED", message } } の形で返す
+ * (それ以外のエラーは従来どおり502 + { error: string } のまま)。
  */
 import { NextResponse } from "next/server";
 
 import { extractBearerToken, verifyAdminIdToken } from "@/lib/admin-token";
 import { buildDraftPlanFromVideo } from "@/lib/ai-extraction/pipeline";
 import { getExtractionProvider } from "@/lib/ai-extraction/provider-factory";
+import { GeminiDailyQuotaExceededError } from "@/lib/ai-extraction/errors";
 import type { DraftSavePlan } from "@/lib/ai-extraction/draft-plan";
 import { fetchVideoTextContent } from "@/lib/youtube-transcript";
 import { listPerformers } from "@/repositories/performers";
@@ -51,8 +58,12 @@ import { listPublishedShops } from "@/repositories/shops";
  */
 export const maxDuration = 300;
 
+/**
+ * error は通常は文字列だが、タスク4-3e(P-017対応)のGemini 1日上限エラーのみ
+ * { code, message } のオブジェクトで返し、クライアントがエラー種別を判別できるようにする
+ */
 interface ExtractErrorResponse {
-  error: string;
+  error: string | { code: string; message: string };
 }
 
 interface RequestBody {
@@ -114,6 +125,12 @@ export async function POST(
 
     return NextResponse.json(plan);
   } catch (error) {
+    if (error instanceof GeminiDailyQuotaExceededError) {
+      return NextResponse.json(
+        { error: { code: error.code, message: error.message } },
+        { status: 429 },
+      );
+    }
     const message = error instanceof Error ? error.message : "AI抽出処理に失敗しました";
     return NextResponse.json({ error: message }, { status: 502 });
   }

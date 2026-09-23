@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { GeminiDailyQuotaExceededError } from "@/lib/ai-extraction/errors";
+
 import { fetchExtractionPlan, fetchUnregisteredVideos } from "./admin-import-client";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -82,5 +84,24 @@ describe("fetchExtractionPlan", () => {
         publishedAt: "2026-01-01T00:00:00Z",
       }),
     ).rejects.toThrow("AI抽出処理に失敗しました");
+  });
+
+  it("Gemini1日上限エラー(429 + error.code=GEMINI_DAILY_QUOTA_EXCEEDED)はGeminiDailyQuotaExceededErrorをthrowする(タスク4-3e, P-017対応)", async () => {
+    const message = "本日のGemini無料枠(1日20回)を使い切りました。日本時間16時ごろ以降に再実行してください";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(429, { error: { code: "GEMINI_DAILY_QUOTA_EXCEEDED", message } }),
+      ),
+    );
+
+    const error: unknown = await fetchExtractionPlan("id-token", {
+      videoId: "abc12345678",
+      title: "テスト動画",
+      publishedAt: "2026-01-01T00:00:00Z",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(GeminiDailyQuotaExceededError);
+    expect((error as Error).message).toBe(message);
   });
 });

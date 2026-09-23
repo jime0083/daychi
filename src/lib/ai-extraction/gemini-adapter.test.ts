@@ -8,6 +8,7 @@ import {
   DEFAULT_GEMINI_MODEL,
   createGeminiExtractionProvider,
 } from "@/lib/ai-extraction/gemini-adapter";
+import { GeminiDailyQuotaExceededError } from "@/lib/ai-extraction/errors";
 import { buildExtractionJsonSchema } from "@/lib/ai-extraction/schema";
 import type { ExtractionInput } from "@/lib/ai-extraction/types";
 
@@ -286,6 +287,176 @@ describe("createGeminiExtractionProvider", () => {
       const result = await provider.extract(SAMPLE_INPUT);
 
       expect(result).toEqual(JSON.parse(SAMPLE_EXTRACTION_JSON));
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+      expect(waitImpl).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("429の利用上限の扱い(タスク4-3e, P-017対応)", () => {
+    /** problem.txt P-017に記載の実APIで確認済みの429応答本文(1日上限の例) */
+    function dailyQuotaResponse(quotaValue = "20", retryDelay = "37s"): Response {
+      return jsonResponse(
+        {
+          error: {
+            code: 429,
+            status: "RESOURCE_EXHAUSTED",
+            message: "You exceeded your current quota, ...",
+            details: [
+              { "@type": "type.googleapis.com/google.rpc.Help" },
+              {
+                "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                violations: [
+                  {
+                    quotaMetric: "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                    quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+                    quotaDimensions: { location: "global", model: "gemini-3.6-flash" },
+                    quotaValue,
+                  },
+                ],
+              },
+              { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay },
+            ],
+          },
+        },
+        { status: 429 },
+      );
+    }
+
+    function shortTermLimitResponse(retryDelay: string): Response {
+      return jsonResponse(
+        {
+          error: {
+            code: 429,
+            status: "RESOURCE_EXHAUSTED",
+            message: "You exceeded your current quota, ...",
+            details: [
+              {
+                "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                violations: [
+                  {
+                    quotaMetric: "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                    quotaId: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier",
+                    quotaValue: "5",
+                  },
+                ],
+              },
+              { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay },
+            ],
+          },
+        },
+        { status: 429 },
+      );
+    }
+
+    it("1日上限(quotaIdにPerDayを含む)の場合は再試行せずGeminiDailyQuotaExceededErrorをthrowする(RetryInfoの短い待機時間は無視する)", async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(dailyQuotaResponse("20", "37s"));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, waitImpl });
+
+      await expect(provider.extract(SAMPLE_INPUT)).rejects.toBeInstanceOf(GeminiDailyQuotaExceededError);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(waitImpl).not.toHaveBeenCalled();
+    });
+
+    it("1日上限のメッセージに応答のquotaValueが含まれる(ハードコードしない)", async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(dailyQuotaResponse("20", "37s"));
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl });
+
+      const error: unknown = await provider.extract(SAMPLE_INPUT).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(GeminiDailyQuotaExceededError);
+      expect((error as Error).message).toContain("1日20回");
+      expect((error as Error).message).toContain("日本時間16時ごろ以降");
+    });
+
+    it("quotaValueが異なる場合はメッセージもその値になる(ハードコードしていないことの確認)", async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(dailyQuotaResponse("50", "10s"));
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl });
+
+      await expect(provider.extract(SAMPLE_INPUT)).rejects.toThrow("1日50回");
+    });
+
+    it("短時間の制限(quotaIdにPerDayを含まない)はRetryInfo.retryDelayの秒数だけ待って再試行し、成功する", async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(shortTermLimitResponse("5s"))
+        .mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, waitImpl });
+
+      const result = await provider.extract(SAMPLE_INPUT);
+
+      expect(result).toEqual(JSON.parse(SAMPLE_EXTRACTION_JSON));
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(waitImpl).toHaveBeenCalledTimes(1);
+      expect(waitImpl).toHaveBeenCalledWith(5000);
+    });
+
+    it("小数を含むretryDelay(例: 37.5s)も正しく秒→ミリ秒変換して待機する", async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(shortTermLimitResponse("37.5s"))
+        .mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, waitImpl });
+
+      await provider.extract(SAMPLE_INPUT);
+
+      expect(waitImpl).toHaveBeenCalledWith(37500);
+    });
+
+    it("retryDelayが90秒を超える場合は90秒(90000ms)に丸める", async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(shortTermLimitResponse("200s"))
+        .mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, waitImpl });
+
+      await provider.extract(SAMPLE_INPUT);
+
+      expect(waitImpl).toHaveBeenCalledWith(90_000);
+    });
+
+    it("error.detailsが無い429は既存の指数バックオフにフォールバックする", async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(jsonResponse({}, { status: 429 }))
+        .mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, waitImpl });
+
+      await provider.extract(SAMPLE_INPUT);
+
+      expect(waitImpl).toHaveBeenCalledWith(1000);
+    });
+
+    it("error.detailsが解析不能な形(JSONでない)でも落ちずに既存の指数バックオフにフォールバックする", async () => {
+      const invalidJsonResponse = new Response("not json", { status: 429 });
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(invalidJsonResponse)
+        .mockResolvedValueOnce(geminiTextResponse(SAMPLE_EXTRACTION_JSON));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({ apiKey: "test-key", fetchImpl, waitImpl });
+
+      const result = await provider.extract(SAMPLE_INPUT);
+
+      expect(result).toEqual(JSON.parse(SAMPLE_EXTRACTION_JSON));
+      expect(waitImpl).toHaveBeenCalledWith(1000);
+    });
+
+    it("短時間の制限でも再試行回数(maxRetries)を使い切ればErrorをthrowする", async () => {
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(shortTermLimitResponse("1s"));
+      const waitImpl = vi.fn().mockResolvedValue(undefined);
+      const provider = createGeminiExtractionProvider({
+        apiKey: "test-key",
+        fetchImpl,
+        waitImpl,
+        maxRetries: 2,
+      });
+
+      await expect(provider.extract(SAMPLE_INPUT)).rejects.toThrow("status: 429");
       expect(fetchImpl).toHaveBeenCalledTimes(3);
       expect(waitImpl).toHaveBeenCalledTimes(2);
     });

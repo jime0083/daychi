@@ -23,6 +23,16 @@
  * 「AI APIの一時的な過負荷エラー(503等)や通信自体の失敗は自動で数回リトライする」、
  * 2026-09-23決定、P-016)。400/401/403等の非一時的エラーは即座に失敗させる。
  *
+ * タスク4-3e(P-017対応): 429(RESOURCE_EXHAUSTED)は一律にリトライすると、Gemini無料枠の
+ * 1日上限(RPD)に達した場合でも無駄な再試行でその日の残り回数をさらに消費してしまう
+ * (problem.txt P-017)。429応答本文の error.details を見て、
+ * - google.rpc.QuotaFailure の quotaId に "PerDay" を含む場合は「1日上限」と判定し、
+ *   再試行せず GeminiDailyQuotaExceededError を即座にthrowする(quotaValueを使った
+ *   分かるメッセージを添える。1日上限でも google.rpc.RetryInfo に短い待機時間(例: 37秒)が
+ *   含まれるが、これは信用せずquotaIdの判定を優先する)
+ * - それ以外の429(短時間の制限)は google.rpc.RetryInfo.retryDelay の秒数だけ待って
+ *   再試行する(上限90秒。retryDelayが無い・解析不能なら既存の指数バックオフにフォールバック)
+ *
  * サーバー専用モジュール(NEXT_PUBLIC_ は使わない)。
  * - APIキー: 環境変数 GEMINI_API_KEY を `x-goog-api-key` ヘッダーで送る
  * - モデル: gemini-3.6-flash(gemini-2.5-flash は新規ユーザー提供終了のため使用不可)
@@ -34,6 +44,7 @@
  */
 import { buildExtractionJsonSchema, validateExtractionResult } from "./schema";
 import { buildExtractionPrompt } from "./prompt";
+import { GeminiDailyQuotaExceededError } from "./errors";
 import type { ExtractionInput, ExtractionProvider, ExtractionResult } from "./types";
 import { buildYoutubeWatchUrl } from "@/lib/youtube";
 
@@ -52,6 +63,90 @@ export const DEFAULT_MAX_RETRIES = 3;
 
 /** 指数バックオフの基準待機時間(ミリ秒)。n回目のリトライ前に BASE * 2^(n-1) ms 待つ */
 const RETRY_BASE_DELAY_MS = 1000;
+
+/**
+ * 429応答の RetryInfo.retryDelay をそのまま信用する場合の待機時間の上限(ミリ秒)。
+ * タスク4-3e(P-017対応)。想定外に長いretryDelay(例: 1日上限時の値の取り違え等)で
+ * 取り込み処理が長時間止まらないようにする
+ */
+const MAX_RETRY_DELAY_FROM_API_MS = 90_000;
+
+/** Gemini 429応答本文(error.details)の1要素の型(必要なフィールドのみ、他は無視する) */
+interface GeminiErrorDetail {
+  ["@type"]?: string;
+  violations?: Array<{ quotaId?: string; quotaValue?: string }>;
+  retryDelay?: string;
+}
+
+interface GeminiErrorResponseBody {
+  error?: {
+    details?: GeminiErrorDetail[];
+  };
+}
+
+/**
+ * 429応答本文をJSONとして解析し error.details を取り出す。
+ * 想定外の形(JSONでない・detailsが無い等)でも例外を投げず空配列を返す
+ * (タスク4-3e: 「安全に解析し、想定外の形でも落ちない」)。
+ */
+async function parseGeminiErrorDetails(response: Response): Promise<GeminiErrorDetail[]> {
+  try {
+    const body = (await response.json()) as GeminiErrorResponseBody;
+    const details = body.error?.details;
+    return Array.isArray(details) ? details : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * error.details から google.rpc.QuotaFailure の「1日上限」違反(quotaIdに"PerDay"を含む)を探す。
+ * 見つかった場合はquotaValue(見つからなければundefined)を含めて返す
+ */
+function findDailyQuotaViolation(
+  details: readonly GeminiErrorDetail[],
+): { quotaValue?: string } | null {
+  for (const detail of details) {
+    for (const violation of detail.violations ?? []) {
+      if (typeof violation.quotaId === "string" && violation.quotaId.includes("PerDay")) {
+        return { quotaValue: violation.quotaValue };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * error.details から google.rpc.RetryInfo.retryDelay(例: "37s"、"37.5s")を探し、
+ * ミリ秒に変換して返す。見つからない・解析できない場合は null(呼び出し側で既存の
+ * 指数バックオフにフォールバックする)
+ */
+function findRetryDelayMs(details: readonly GeminiErrorDetail[]): number | null {
+  for (const detail of details) {
+    if (typeof detail.retryDelay !== "string") {
+      continue;
+    }
+    const match = /^(\d+(?:\.\d+)?)s$/.exec(detail.retryDelay.trim());
+    if (!match) {
+      continue;
+    }
+    const seconds = Number.parseFloat(match[1]);
+    if (Number.isNaN(seconds)) {
+      continue;
+    }
+    return Math.round(seconds * 1000);
+  }
+  return null;
+}
+
+/**
+ * 「本日のGemini無料枠を使い切りました」メッセージを組み立てる。
+ * 上限値はハードコードせず、応答のquotaValueをそのまま使う(取得できなければ数値部分を省く)
+ */
+function buildDailyQuotaMessage(quotaValue: string | undefined): string {
+  const limitPhrase = quotaValue !== undefined && quotaValue !== "" ? `(1日${quotaValue}回)` : "";
+  return `本日のGemini無料枠${limitPhrase}を使い切りました。日本時間16時ごろ以降に再実行してください`;
+}
 
 /** リトライ待機を行う関数の型(テストでは即時解決する実装に差し替える) */
 type WaitFn = (delayMs: number) => Promise<void>;
@@ -143,6 +238,27 @@ async function fetchGeminiJson(
 
     if (response.ok) {
       return (await response.json()) as GeminiGenerateContentResponse;
+    }
+
+    if (response.status === 429) {
+      const details = await parseGeminiErrorDetails(response);
+
+      const dailyQuota = findDailyQuotaViolation(details);
+      if (dailyQuota) {
+        throw new GeminiDailyQuotaExceededError(buildDailyQuotaMessage(dailyQuota.quotaValue));
+      }
+
+      if (attempt >= maxRetries) {
+        throw new Error(`Gemini APIがエラーを返しました(status: ${response.status})`);
+      }
+      attempt += 1;
+      const retryDelayMs = findRetryDelayMs(details);
+      const delayMs =
+        retryDelayMs !== null
+          ? Math.min(retryDelayMs, MAX_RETRY_DELAY_FROM_API_MS)
+          : RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+      await wait(delayMs);
+      continue;
     }
 
     const canRetry = RETRYABLE_STATUSES.has(response.status) && attempt < maxRetries;
