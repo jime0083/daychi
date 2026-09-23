@@ -84,6 +84,8 @@ shops/{id}
   location: { lat: number, lng: number }
   closed: boolean        // 閉店フラグ(データとして保持。表示UIは将来拡張)
   tagIds: string[]       // Phase 5で使用
+  locationConfirmed?: boolean // AI抽出の下書きで座標未確定なら false(未設定=確定済み扱い)。
+                              // false の間は承認(published化)不可。2026-09-23決定
   status: "draft" | "published"
   createdAt / updatedAt: Timestamp
 
@@ -92,6 +94,10 @@ visits/{id}             // 店舗×動画の中間コレクション
   videoId: string
   consumptions: [ { performerId: string, items: string[] } ]  // 出演者ごとの飲食メニュー
   // 同一performerIdが複数要素に含まれることを許容する(重複防止バリデーションは行わない。2026-09-22決定)
+  unresolvedConsumptions?: [ { performerName: string, items: string[] } ]
+                         // AI抽出で登録済み出演者に一致しなかった名前の飲食記録(下書きのみ)。
+                         // レビュー画面で既存出演者に割り当てるか新規登録してconsumptionsへ移す。
+                         // 1件でも残っている間は承認(published化)不可。2026-09-23決定
   status: "draft" | "published"
   createdAt / updatedAt: Timestamp
 
@@ -129,6 +135,11 @@ YouTube Data API でチャンネルの動画一覧を取得 → 未登録動画�
   - Claude API アダプタは実装するが実行は保留(APIキー設定+明示的な選択時のみ動作。
     既定では呼ばれない。将来Claudeに切り替える場合はキー設定と切替のみで移行可能)
   - 抽出結果のスキーマ(店名/住所候補/出演者ごとの飲食メニュー)はプロバイダ間で共通
+- 下書き保存時の扱い(2026-09-23決定):
+  - 住所から座標が取れなかった店舗は、仮の座標で保存しつつ locationConfirmed=false にする。
+    レビュー画面で管理者がピンを置くまで承認できない
+  - 登録済み出演者に一致しない名前は捨てずに unresolvedConsumptions に残す。レビュー画面で
+    既存出演者に割り当てるか新規登録するまで承認できない
 
 ## 6. 技術スタック
 

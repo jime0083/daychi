@@ -262,7 +262,20 @@ Phase 4: AI自動抽出
     完了条件: tsc パス+ユニットテスト全通過(Gemini/Claude/GSIはモック)。抽出結果スキーマが
               両プロバイダで共通であること。既定でClaudeアダプタが呼ばれないこと(テストで担保)
 
+[ ] 4-3a 下書き保存の扱い変更(座標未確定・未登録出演者)
+    内容: requirements.md「4. データモデル」「5. AI自動抽出」の2026-09-23決定に合わせ、
+          4-3の saveDraftExtraction / draft組み立てを変更する。
+          (1) ジオコード失敗・住所なしの店舗: 仮座標で保存しつつ shops.locationConfirmed=false。
+              ジオコード成功時は locationConfirmed を付けない(または true)
+          (2) 登録済み出演者に一致しない名前: consumptionsから捨てず visits.unresolvedConsumptions
+              に {performerName, items} として保存
+          型(src/types の ShopData/VisitData)に任意項目として追加。既存の公開ページ・管理画面・
+          Firestoreルール・E2Eの挙動は変えない(任意項目なので既存データはそのまま動く)
+    完了条件: 上記2点がユニットテストで担保される。npm run typecheck / lint / test / e2e 全緑
+
 [ ] 4-4 管理画面: 取り込み実行とレビューUI
+    ※追加要件(2026-09-23): locationConfirmed=false の店舗はピンを置くまで承認不可、
+      unresolvedConsumptions が残る訪問は割り当て(既存出演者 or 新規登録)が済むまで承認不可
     内容: /admin に「取り込み実行」ボタン(未登録動画を抽出しdraft作成)。
           draft一覧→内容修正→ピン位置ドラッグ確定→承認(published化)のレビューUI。
           E2Eでは抽出API層をモックしdraftデータで検証
