@@ -639,7 +639,7 @@
 
 ## P-023: ピン直接クリックのE2Eがまれに "intercepts pointer events" でタイムアウトする
 - 記録日: 2026-09-25
-- 状態: 調査中
+- 状態: 解決済み(詳細は下記)
 - 発生箇所: e2e/detail-sheet.spec.ts・e2e/performer-filter.spec.ts のピン直接クリック(6-1実装時に実装担当が報告)
 - 問題内容:
   想定した動き: ピンのクリックが常に成功する
@@ -655,5 +655,92 @@
   - 仮説(未検証): マーカーの位置はMapLibreの投影計算で決まるため、地図の初期化完了前にクリックすると
     マーカーのDOM位置が未確定で、その座標にある背景divがクリックを受ける
   - 6-1再レビュー(2026-09-25): フルE2E 3回で計6件発生(1回あたり1〜3件)。同じspec・同じ奪う要素
-- 特定した原因: (未特定。タスク6-1aで仮説をトレース等で検証して確定する)
+- タスク6-1aでの調査(2026-09-25、実装担当):
+  1. `npx playwright test e2e/detail-sheet.spec.ts --repeat-each=8 --workers=6 --trace=on` で実機再現に成功
+     (32件中1件失敗)。失敗時のスクリーンショット・trace(--trace on)を確認すると、地図上に
+     shop-test-published-01のピンともう1件のピン(他specが並行して投入した店舗)が離れた位置に
+     存在し、shop-test-published-01のピンは画面上部のPerformerFilter/TagFilterの帯のすぐ下、
+     ほぼ帯と地図の境界線上に小さく(先端だけ)見える状態だった。Playwrightのログは
+     「element is visible, enabled and stable」を毎回報告しており(=要素自体は移動していない)、
+     30秒間・60回超のリトライすべてで同一の<div class="flex min-h-0 w-full flex-1 flex-col">が
+     intercept していた。これは「地図初期化中の一時的なズレ」ではなく、ページ読み込み完了後も
+     ずっと変わらない恒常的な位置ズレであることを示す(仮説「初期化完了前のクリック」を否定する根拠)。
+  2. 実機のPlaywrightスクリプト(chromium.launch、リポジトリ外のスクラッチファイルで作成・
+     検証後に削除。コミットや `e2e/` 配下への追加はしていない)で、Firebase Emulatorに
+     shop-test-published-01(35.6938, 139.7536)から約44km離れた店舗を1件追加した状態で
+     公開ページを開き、`getBoundingClientRect()` で実際のピン要素とpublic-map divの座標を採取した。
+     結果、shop-test-published-01ピンの中心Y座標が地図コンテナの上端からわずか-3px
+     (=地図コンテナの外)という、fitBoundsのpadding指定(48px)を大きく下回るクリアランスしか
+     確保されていないことを確認した。並行実行のノイズを排したseedデータ+この1店舗のみの
+     決定的な単一ページ検証でも、同じ組み合わせでクリアランスは34px(padding=48の指定より
+     14px不足)にとどまり、これはfitBounds自体の恒常的な不足(たまたまのタイミング問題ではない)
+     であることを確認した。
+  3. src/components/map/PublicMap.tsx の該当effectを確認: `map.fitBounds(bounds, { padding: 48,
+     maxZoom: 14, duration: 0 })`。渡しているpaddingは緯度経度の「座標点」基準のマージンであり、
+     (a) maplibregl.Markerの既定anchor("center")によりピンの見た目(既定サイズ縦約41px)は
+     座標点から上下に約20.5pxはみ出すこと、(b) fitBoundsの内部計算(Mercator投影+ズーム量子化)は
+     見開き範囲が広いほど無視できない近似誤差を生むこと、の2点をpadding=48が吸収しきれておらず、
+     店舗間距離が実際のE2Eで起こりうる(約44km、e2e/detail-sheet.spec.tsのDYNAMIC_SHOP_LAT/LNG等)
+     程度になると、ピンが地図コンテナの上端をはみ出しPerformerFilter/TagFilterの帯の領域に
+     めり込むことが分かった。
+  4. src/components/map/PerformerFilter.tsx・TagFilter.tsx を確認: 両コンポーネントの帯div自体は
+     `pointer-events-none`(2026-09-21の別の重なり修正で、帯を地図オーバーレイからバー配置に
+     変更した際に、DetailSheetのオーバーレイクリック(帯の裏にある全画面オーバーレイ)を
+     妨げないよう意図的に付与。実際に操作が必要な`<ul>`のみ`pointer-events-auto`で復元)。
+     この設計自体はDetailSheetのオーバーレイクリック閉じる操作(e2e/detail-sheet.spec.ts
+     「オーバーレイクリックで詳細シートが閉じる」がposition {x:10,y:10}=帯の領域内をクリックして
+     検証している)に必要なため変更できない。
+  5. 上記2〜4を合成すると: 3.で判明した通りピンが帯の領域にはみ出すと、帯div自体は
+     pointer-events-noneのため要素としてはヒットせず(かつ帯div自身が持つz-[60]により
+     見た目上はピンより手前に描画され隠す)、帯の`<ul>`が届かない座標(帯の見出しテキスト右側の
+     余白等)ではクリックがそのまま透過して親の素のflexラッパーに落ちる。これが
+     "intercepts pointer events" で毎回同じ素のflexラッパーが報告される理由(帯が
+     pointer-events-noneであることと、地図コンテナが実際にはoverflow: visibleでマーカーが
+     コンテナ外にもレンダリングされうることの組み合わせ)。
+  6. 検証: chromium.launchによる並行10ページの繰り返し検証(上記2.と同じ44km店舗を追加した状態)で、
+     修正前(padding=48)は10並行×複数回の試行で断続的に失敗(約80クリック中5〜6件失敗、体感約7%)
+     したのに対し、修正後(padding=96)は合計200クリック(10並行×20回)で失敗0件だった。
+- 特定した原因: src/components/map/PublicMap.tsxのfitBounds()に渡すpadding(旧48px)が、
+  (a) maplibregl.Markerの既定anchor("center")によるピンの見た目サイズ(縦約41px、座標点から
+  上下に約20.5pxはみ出す)と、(b) fitBounds自体のMercator投影・ズーム量子化に起因する近似誤差を
+  考慮しておらず、店舗間距離が実際のE2Eデータで起こりうる規模(約44km)になると、ピンの座標点が
+  地図コンテナの上端付近(実測でコンテナ外まで)にはみ出す。地図の直上に配置されている
+  PerformerFilter/TagFilterの帯div(pointer-events-none。DetailSheetのオーバーレイクリックを
+  妨げないための意図的な設計で、これ自体は変更不要)の領域にピンがめり込むと、帯自体は
+  クリックを透過するため、そのままクリックが親の素のflexラッパー
+  (<div class="flex min-h-0 w-full flex-1 flex-col">)に奪われてintercepted扱いになる。
+  6-1の変更・地図の初期化タイミングとは無関係で、地図に表示中の店舗の緯度経度の組み合わせ
+  (E2Eでは他specが並行して投入する店舗データ)次第で恒常的に起こりうるアプリ側の実バグ
+  (実利用者データでも起こりうる)であり、テスト側の待ち合わせ不足ではない。
+- 修正: MAP_FIT_BOUNDS_PADDING(src/lib/map-config.ts)を48→96に変更し、上記(a)(b)の不足分を
+  吸収できる安全マージンを持たせた(実測に基づく値。詳細はmap-config.tsのコメント参照)。
+  fitBounds()の呼び出し自体(maxZoom/duration等)やPerformerFilter/TagFilterの
+  pointer-events設計は変更していない(後者はDetailSheetのオーバーレイクリック機能に必要なため)。
+- 検証: npm run e2eを連続3回実行し、全件PASS(失敗0)を確認した
+  (1回目: 123 passed / 15 skipped, 2回目: 123 passed / 15 skipped, 3回目: 123 passed / 15 skipped)。
+  npm run typecheck / npm run lint / npm run test も全緑
+- レビューでの検証・訂正(2026-09-25 daychi-review):
+  - メインの仮説「フィルタ帯が後から出て地図が縮み、fitBounds後にピンがずれる」は、ResizeObserverと座標の
+    連続計測(通常・CPU10倍減速・12並行)で否定された(帯と地図サイズはピン配置前に確定済み)
+  - ずれの正確な内訳: maplibregl.Marker既定の anchor="center"(ピン高さの半分 約20.5px)と、既定マーカーに
+    組み込まれた offset [0,-14] の合成で、座標点から上方向に約34.5pxの恒常的なはみ出し。上記の
+    「fitBoundsの投影・ズーム量子化の誤差」は確認されず、投影座標は要求paddingどおりだった(訂正)
+  - padding 48→96でクリアランスは13.5px→61.5px。フルE2E連続3回失敗0、高負荷(repeat-each=5, workers=6)で失敗0
+- 解決日: 2026-09-25
+- 状態: 解決済み
 - 切り出したタスク: progress.txt タスク6-1a(原因特定と修正を1タスクで行う)
+
+## P-024: 極端な並列負荷のE2Eで管理画面の画面遷移がタイムアウトする
+- 記録日: 2026-09-25
+- 状態: 未着手(優先度低)
+- 発生箇所: e2e/performer-filter.spec.ts「詳細シートを開いた状態でも出演者フィルタを操作でき…」の管理画面部分
+  (「訪問」登録画面の見出し表示待ち)。6-1aレビューで発見
+- 問題内容:
+  想定した動き: 並列度を上げてもテストが通る
+  実際の動き: npx playwright test e2e/performer-filter.spec.ts --repeat-each=15 --workers=8 で複数件タイムアウト
+              (repeat-each=5, workers=6 や通常の npm run e2e では発生しない)
+- 再現手順: 上記コマンドを実行
+- 原因調査: 未実施(レビュー担当の推測: 単一のFirestore Emulatorとdevサーバーが極端な負荷で逼迫)
+- 特定した原因: (未特定)
+- 切り出したタスク: (未定。通常のE2E運用では発生しないため、発生頻度が上がった時点で調査する)
+

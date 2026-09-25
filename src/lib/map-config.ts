@@ -24,8 +24,22 @@ export const DEFAULT_MAP_ZOOM = 14;
 /**
  * 公開ページ地図(タスク3-1〜)で複数/単一のピンをfitBoundsする際の周囲余白(px)。
  * ピンが地図の端に接してしまい見切れることを防ぐための値であり、特定の店舗データには依存しない。
+ *
+ * 96という値について(タスク6-1a・problem.txt P-023の原因調査で判明): MapLibreの
+ * fitBounds()に渡すpaddingは「緯度経度の座標点」を基準にしたコンテナ内マージンであり、
+ * (1) maplibregl.Markerの既定anchor("center")によりピン自体の見た目(既定サイズ縦約41px)は
+ * 座標点から上下に約20.5pxはみ出すこと、(2) fitBoundsの内部計算(Mercator投影+ズーム量子化)
+ * には見開き範囲が広いほど無視できない近似誤差が生じること、の2つを考慮していなかった。
+ * 実測(店舗間距離が実際のE2Eで起こりうる約44km程度離れたケース)では、padding=48指定でも
+ * 実際のクリア margin が34px(場合によっては地図コンテナの外=マイナス)しか確保されず、
+ * 地図の直上に帯状に配置されたPerformerFilter/TagFilter(pointer-events-noneでバー自体への
+ * クリックは透過させ、下のDetailSheetオーバーレイクリックを妨げない設計。各コンポーネントの
+ * コメント参照)の領域にピンがはみ出し、そのピンへのクリックが素通りして親のflexラッパーに
+ * 奪われる(Playwrightの"intercepts pointer events")事象が発生していた。96はこの実測不足分
+ * (最大約48pxの不足)を吸収できるだけの安全マージンを載せた値(実測で店舗間距離約44kmの
+ * ケースを複数回再現し、96であれば恒常的に十分なクリアランスが確保されることを確認済み)。
  */
-export const MAP_FIT_BOUNDS_PADDING = 48;
+export const MAP_FIT_BOUNDS_PADDING = 96;
 
 /**
  * サイドバー動画クリックでフォーカスした店舗のピンをハイライト表示する際のCSS filter値
