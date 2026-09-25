@@ -19,6 +19,10 @@
  * まだdraftのもの→published、この動画の訪問→publishedの順に更新する
  * (既にpublishedの店舗=既存店舗を再利用したケースは更新しない。
  * requirements.md「既存published店舗を再利用した訪問はその店舗を変更しない」)。
+ *
+ * タグ付与(タスク5-2): タグマスタ(tags)全件を読み込み、ReviewShopCardへ渡す
+ * (店舗管理画面と同じTagCheckboxListで表示・編集する)。承認処理(handleApprove)は
+ * tagIdsを含め店舗の他フィールドを一切書き換えない(status以外はupdateShopを呼ばない)。
  */
 import Link from "next/link";
 import { use, useCallback, useEffect, useRef, useState } from "react";
@@ -32,10 +36,12 @@ import { useTransientMessage } from "@/lib/use-transient-message";
 import { buildYoutubeThumbnailUrl } from "@/lib/youtube";
 import { listPerformers } from "@/repositories/performers";
 import { listShops, updateShop } from "@/repositories/shops";
+import { listTags } from "@/repositories/tags";
 import { listVideos, updateVideo } from "@/repositories/videos";
 import { listVisits, updateVisit } from "@/repositories/visits";
 import type { Performer } from "@/types/performer";
 import type { Shop } from "@/types/shop";
+import type { Tag } from "@/types/tag";
 import type { Video } from "@/types/video";
 import type { Visit } from "@/types/visit";
 
@@ -68,6 +74,7 @@ export default function AdminReviewVideoPage(props: PageProps<"/admin/review/[vi
   const [shops, setShops] = useState<Shop[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [performers, setPerformers] = useState<Performer[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
@@ -84,11 +91,12 @@ export default function AdminReviewVideoPage(props: PageProps<"/admin/review/[vi
 
   const reload = useCallback(async (): Promise<void> => {
     try {
-      const [allVideos, allShops, allVisits, allPerformers] = await Promise.all([
+      const [allVideos, allShops, allVisits, allPerformers, allTags] = await Promise.all([
         listVideos(),
         listShops(),
         listVisits(),
         listPerformers(),
+        listTags(),
       ]);
       if (!mountedRef.current) {
         return;
@@ -99,6 +107,7 @@ export default function AdminReviewVideoPage(props: PageProps<"/admin/review/[vi
       setVisits(videoVisits);
       setShops(shopsForVisits(allShops, videoVisits));
       setPerformers([...allPerformers].sort((a, b) => a.order - b.order));
+      setTags(allTags);
       setLoadError(null);
     } catch (error) {
       if (mountedRef.current) {
@@ -114,8 +123,8 @@ export default function AdminReviewVideoPage(props: PageProps<"/admin/review/[vi
   // (他admin画面の初回読み込みeffectと同じ設計。reload自体はShop/VisitカードのonSaved
   // コールバックやhandleApprove(いずれもuseEffect外)から呼ばれる)。
   useEffect(() => {
-    Promise.all([listVideos(), listShops(), listVisits(), listPerformers()])
-      .then(([allVideos, allShops, allVisits, allPerformers]) => {
+    Promise.all([listVideos(), listShops(), listVisits(), listPerformers(), listTags()])
+      .then(([allVideos, allShops, allVisits, allPerformers, allTags]) => {
         if (!mountedRef.current) {
           return;
         }
@@ -125,6 +134,7 @@ export default function AdminReviewVideoPage(props: PageProps<"/admin/review/[vi
         setVisits(videoVisits);
         setShops(shopsForVisits(allShops, videoVisits));
         setPerformers([...allPerformers].sort((a, b) => a.order - b.order));
+        setTags(allTags);
         setLoadError(null);
       })
       .catch((error: unknown) => {
@@ -214,7 +224,12 @@ export default function AdminReviewVideoPage(props: PageProps<"/admin/review/[vi
           <p className="text-sm text-zinc-500 dark:text-zinc-400">紐づく店舗はありません</p>
         )}
         {shops.map((shop) => (
-          <ReviewShopCard key={shop.id} shop={shop} onSaved={() => void reload()} />
+          <ReviewShopCard
+            key={shop.id}
+            shop={shop}
+            allTags={tags}
+            onSaved={() => void reload()}
+          />
         ))}
       </div>
 

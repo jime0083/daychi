@@ -6,8 +6,8 @@
  * ピン配置に変更。problem.txt P-011対応)。
  *
  * requirements.md「3.2 管理画面」「4. データモデル」shops に準拠し、
- * 店名・住所・営業時間・情報基準日(infoAsOf)・閉店フラグ・緯度経度(location)の
- * CRUDを行う。tagIds(Phase 5用)は本タスクの範囲外のため常に空配列で保存する。
+ * 店名・住所・営業時間・情報基準日(infoAsOf)・閉店フラグ・緯度経度(location)・
+ * タグ(tagIds、タスク5-2)のCRUDを行う。
  * status(draft/published)は作成時に "draft" 固定とする。draft⇔published切替は
  * タスク2-6でPublishStatusToggle(共通コンポーネント)により一覧から行う。
  *
@@ -28,6 +28,11 @@
  * バリデーション: 店名・住所・情報基準日・緯度経度(数値)をそれぞれ検証し、
  * 不足項目をまとめてエラーメッセージ表示する。削除は確認ダイアログを挟む。
  * 作成・更新・公開切替の成功時は一時的な成功メッセージを表示する。
+ *
+ * タグ付与(タスク5-2): タグマスタ(tags)全件を読み込み、TagCheckboxList
+ * (src/components/admin/TagCheckboxList.tsx、レビュー画面のReviewShopCardと共通)を
+ * 作成・編集フォームにそれぞれ表示する。作成時はcreateForm.tagIds、編集時は
+ * editForm.tagIdsをそのまま保存する(バリデーション対象外。空配列も許容)。
  */
 import { Timestamp } from "firebase/firestore";
 import dynamic from "next/dynamic";
@@ -36,10 +41,13 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { PublishStatusToggle } from "@/components/admin/PublishStatusToggle";
 import { SuccessMessage } from "@/components/admin/SuccessMessage";
+import { TagCheckboxList } from "@/components/admin/TagCheckboxList";
 import { geocodeAddress } from "@/lib/admin-geocode-client";
 import { useAdminAuth } from "@/lib/admin-auth";
 import { createShop, deleteShop, listShops, updateShop } from "@/repositories/shops";
+import { listTags } from "@/repositories/tags";
 import type { Shop } from "@/types/shop";
+import type { Tag } from "@/types/tag";
 import type { GeoLocation, PublishStatus } from "@/types/common";
 import { DEFAULT_MAP_CENTER } from "@/lib/map-config";
 import { useTransientMessage } from "@/lib/use-transient-message";
@@ -70,6 +78,7 @@ interface ShopFormState {
   closed: boolean;
   lat: string;
   lng: string;
+  tagIds: string[];
 }
 
 /** フォーム入力値のうちバリデーション・変換を通過した後の値(status/tagIdsは含まない) */
@@ -90,6 +99,7 @@ const EMPTY_FORM: ShopFormState = {
   closed: false,
   lat: String(DEFAULT_MAP_CENTER.lat),
   lng: String(DEFAULT_MAP_CENTER.lng),
+  tagIds: [],
 };
 
 function errorMessage(error: unknown): string {
@@ -187,6 +197,8 @@ export default function AdminShopsPage() {
   const [shops, setShops] = useState<Shop[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
 
+  const [tags, setTags] = useState<Tag[]>([]);
+
   const [createForm, setCreateForm] = useState<ShopFormState>(EMPTY_FORM);
   const [createErrors, setCreateErrors] = useState<string[]>([]);
   const [createGeocoding, setCreateGeocoding] = useState(false);
@@ -240,6 +252,21 @@ export default function AdminShopsPage() {
       });
   }, []);
 
+  // タグマスタ一覧の読み込み(タスク5-2)。頻繁に変わるデータではないため、
+  // 店舗一覧のreloadとは独立してマウント時に一度だけ取得する
+  useEffect(() => {
+    listTags()
+      .then((list) => {
+        if (mountedRef.current) {
+          setTags(list);
+        }
+      })
+      .catch(() => {
+        // タグ一覧の取得失敗はタグ選択UIが「タグが未登録です」表示になるだけで、
+        // 店舗フォーム自体の他項目の利用を妨げないため、専用のエラー表示は設けない
+      });
+  }, []);
+
   /**
    * 「住所からピンを立てる」ボタン(作成フォーム側)。/api/admin/geocode を呼び、
    * 成功したらcreateForm.lat/lngを更新する(地図のマーカー位置・中心も
@@ -283,7 +310,7 @@ export default function AdminShopsPage() {
     }
     setCreateErrors([]);
     try {
-      await createShop({ ...result.data, tagIds: [], status: "draft" });
+      await createShop({ ...result.data, tagIds: createForm.tagIds, status: "draft" });
       setCreateForm(EMPTY_FORM);
       setCreateGeocodeError(null);
       showSuccess("店舗を作成しました");
@@ -303,6 +330,7 @@ export default function AdminShopsPage() {
       closed: shop.closed,
       lat: String(shop.location.lat),
       lng: String(shop.location.lng),
+      tagIds: shop.tagIds ?? [],
     });
     setEditErrors([]);
     setEditGeocodeError(null);
@@ -354,7 +382,7 @@ export default function AdminShopsPage() {
       return;
     }
     try {
-      await updateShop(id, result.data);
+      await updateShop(id, { ...result.data, tagIds: editForm.tagIds });
       setEditingId(null);
       setEditErrors([]);
       setEditGeocodeError(null);
@@ -473,6 +501,13 @@ export default function AdminShopsPage() {
           </label>
         </div>
 
+        <TagCheckboxList
+          idPrefix="shop-create"
+          allTags={tags}
+          selectedTagIds={createForm.tagIds}
+          onChange={(nextTagIds) => setCreateForm({ ...createForm, tagIds: nextTagIds })}
+        />
+
         <div className="flex flex-wrap items-end gap-3">
           <button
             type="button"
@@ -549,6 +584,7 @@ export default function AdminShopsPage() {
                 <th className="py-2 pr-4 font-medium">情報基準日</th>
                 <th className="py-2 pr-4 font-medium">閉店</th>
                 <th className="py-2 pr-4 font-medium">座標</th>
+                <th className="py-2 pr-4 font-medium">タグ</th>
                 <th className="py-2 pr-4 font-medium">ステータス</th>
                 <th className="py-2 pr-4 font-medium">操作</th>
               </tr>
@@ -556,6 +592,9 @@ export default function AdminShopsPage() {
             <tbody>
               {shops.map((shop) => {
                 const isEditing = editingId === shop.id;
+                const tagNames = (shop.tagIds ?? [])
+                  .map((tagId) => tags.find((tag) => tag.id === tagId)?.name)
+                  .filter((name): name is string => name !== undefined);
                 return (
                   <tr
                     key={shop.id}
@@ -563,7 +602,7 @@ export default function AdminShopsPage() {
                     className="border-b border-zinc-100 dark:border-zinc-900"
                   >
                     {isEditing ? (
-                      <td colSpan={8} className="py-2 pr-4">
+                      <td colSpan={9} className="py-2 pr-4">
                         <form
                           onSubmit={(event) => {
                             void handleEditSubmit(event, shop.id);
@@ -634,6 +673,15 @@ export default function AdminShopsPage() {
                               閉店
                             </label>
                           </div>
+
+                          <TagCheckboxList
+                            idPrefix="shop-edit"
+                            allTags={tags}
+                            selectedTagIds={editForm.tagIds}
+                            onChange={(nextTagIds) =>
+                              setEditForm({ ...editForm, tagIds: nextTagIds })
+                            }
+                          />
 
                           <div className="flex flex-wrap items-end gap-3">
                             <button
@@ -721,6 +769,12 @@ export default function AdminShopsPage() {
                           {shop.location.lat.toFixed(6)}, {shop.location.lng.toFixed(6)}
                         </td>
                         <td
+                          data-testid="shop-tags"
+                          className="py-2 pr-4 text-zinc-700 dark:text-zinc-300"
+                        >
+                          {tagNames.length > 0 ? tagNames.join("、") : ""}
+                        </td>
+                        <td
                           data-testid="shop-status"
                           className="py-2 pr-4 text-zinc-700 dark:text-zinc-300"
                         >
@@ -756,7 +810,7 @@ export default function AdminShopsPage() {
               })}
               {shops.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-4 text-center text-zinc-500 dark:text-zinc-400">
+                  <td colSpan={9} className="py-4 text-center text-zinc-500 dark:text-zinc-400">
                     店舗が登録されていません
                   </td>
                 </tr>

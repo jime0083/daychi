@@ -22,16 +22,24 @@
  * useState の遅延初期化(shopの初期値のみ)と親側の`key={shop.id}`(店舗切替時の
  * 再マウント)だけで十分に整合性が保てる。locationConfirmedの表示切替は
  * ローカルstateを介さず常にpropsのshop.locationConfirmedを直接参照する。
+ *
+ * タグ付与(タスク5-2、requirements.md「3.2 管理画面」2026-09-24決定): 店舗管理画面
+ * (/admin/shops)と同じTagCheckboxList(src/components/admin/TagCheckboxList.tsx)を
+ * 表示し、「店舗情報を保存」ボタンを押した時にtagIdsもまとめて保存する。承認処理
+ * (親ページのhandleApprove)はtagIdsを一切書き換えない(既存published店舗を
+ * 再利用したカードでも、管理者が保存を押した時だけ書き込む設計を維持)。
  */
 import { Timestamp } from "firebase/firestore";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 
+import { TagCheckboxList } from "@/components/admin/TagCheckboxList";
 import { useAdminAuth } from "@/lib/admin-auth";
 import { geocodeAddress } from "@/lib/admin-geocode-client";
 import { updateShop } from "@/repositories/shops";
 import type { GeoLocation } from "@/types/common";
 import type { Shop } from "@/types/shop";
+import type { Tag } from "@/types/tag";
 
 const ShopLocationPicker = dynamic(
   () => import("@/components/admin/ShopLocationPicker").then((mod) => mod.ShopLocationPicker),
@@ -53,6 +61,7 @@ interface ShopInfoFormState {
   address: string;
   businessHours: string;
   infoAsOf: string; // <input type="date"> の値(YYYY-MM-DD)
+  tagIds: string[];
 }
 
 function errorMessage(error: unknown): string {
@@ -81,15 +90,17 @@ function toFormState(shop: Shop): ShopInfoFormState {
     address: shop.address,
     businessHours: shop.businessHours,
     infoAsOf: timestampToDateInputValue(shop.infoAsOf),
+    tagIds: shop.tagIds ?? [],
   };
 }
 
 interface ReviewShopCardProps {
   shop: Shop;
+  allTags: Tag[];
   onSaved: () => void;
 }
 
-export function ReviewShopCard({ shop, onSaved }: ReviewShopCardProps) {
+export function ReviewShopCard({ shop, allTags, onSaved }: ReviewShopCardProps) {
   const authStatus = useAdminAuth();
 
   const [form, setForm] = useState<ShopInfoFormState>(() => toFormState(shop));
@@ -129,6 +140,7 @@ export function ReviewShopCard({ shop, onSaved }: ReviewShopCardProps) {
         address,
         businessHours: form.businessHours.trim(),
         infoAsOf,
+        tagIds: form.tagIds,
       });
       onSaved();
     } catch (error) {
@@ -248,6 +260,13 @@ export function ReviewShopCard({ shop, onSaved }: ReviewShopCardProps) {
           {saving ? "保存中..." : "店舗情報を保存"}
         </button>
       </div>
+
+      <TagCheckboxList
+        idPrefix="review-shop"
+        allTags={allTags}
+        selectedTagIds={form.tagIds}
+        onChange={(nextTagIds) => setForm({ ...form, tagIds: nextTagIds })}
+      />
 
       {errors.length > 0 && (
         <ul

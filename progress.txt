@@ -362,7 +362,8 @@ Phase 5: タグ機能(全機能完成後に実施)
     完了条件: detail-sheet.spec.ts と admin-import-existing-shop.spec.ts を含むフルE2Eを連続3回実行して全緑。
               typecheck / lint / test 全緑
 
-[ ] 5-2 店舗へのタグ付与UI
+[x] 5-2 店舗へのタグ付与UI
+    ※完了(2026-09-25): daychi-review PASS(フルE2E 118 passed×2、タグ0件案内・削除済みタグID混入・モバイル折り返しも確認)
     内容: 店舗編集フォームにタグ複数選択UIを追加(shops.tagIds)。AI取り込みのレビュー画面の店舗カードでも
           同じくタグを付与できるようにする(2026-09-24決定)
     完了条件: E2E合格(店舗管理画面・レビュー画面の両方でタグ付与→保存→再表示で保持されている)
