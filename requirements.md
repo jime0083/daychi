@@ -49,6 +49,10 @@ YouTubeチャンネル「Daychi〜COFFEE CHANNEL」で紹介されたコーヒ�
   - Instagramアイコン: 店舗にInstagramが登録されている場合のみ表示。押すと当該店舗のInstagramアカウントを新しいタブ(スマホはアプリ)で開く
   - 「Googleマップで開く」ボタン: 店名+住所で検索した状態のGoogleマップ(Google Maps URLs)を新しいタブ(スマホはアプリ)で開く。
     利用者のGoogleマップへの保存(ピン留め)を自動で行うAPIはGoogleが提供していないため、保存は利用者がGoogleマップ上で行う
+    店舗に googlePlaceId が登録されている場合は query_place_id も付けて、確実にその店舗ページを開く
+- 営業時間(businessHours)は入力任意。空欄の店舗は詳細シートの営業時間欄に「Googleマップでご確認ください」と表示する
+  (Googleの店舗情報をこのアプリに保存することはGoogle Maps Platform規約で禁止のため、最新の営業時間は
+  「Googleマップで開く」経由で利用者に確認してもらう方針。地図はMapLibreのまま・Google有料APIは使わない)(2026-09-25決定)
 
 **絞り込み機能:**
 - 出演者フィルタ: メイン出演者以外の出演者(isMain: false)で絞り込み。選択した出演者が出演した訪問がある店舗のみ表示(Phase 3で実装)
@@ -100,6 +104,8 @@ shops/{id}
   tagIds: string[]       // Phase 5で使用
   instagramUrl?: string  // 店舗のInstagramアカウントURL(任意)。管理者が店舗フォーム/レビュー画面で手入力。
                          // AIでは抽出しない。https://www.instagram.com/ のURLのみ受け付ける(2026-09-25決定)
+  googlePlaceId?: string // GoogleマップのPlace ID(任意)。管理者が店舗フォーム/レビュー画面で手入力(Place ID Finder等で調べる)。
+                         // 規約上保存が許可されているのはPlace IDのみ(2026-09-25決定)
   locationConfirmed?: boolean // AI抽出の下書きで座標未確定なら false(未設定=確定済み扱い)。
                               // false の間は承認(published化)不可。2026-09-23決定
   status: "draft" | "published"
