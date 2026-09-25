@@ -26,6 +26,13 @@ export interface ShopData {
   /** Phase 5で使用するタグID一覧 */
   tagIds: string[];
   /**
+   * 店舗のInstagramアカウントURL(任意)。管理者が店舗フォーム/レビュー画面で手入力する
+   * (AI抽出では扱わない)。https://www.instagram.com/ で始まるURLのみ許可
+   * (src/lib/validation.tsのvalidateInstagramUrlでバリデーション、タスク6-2・P-020)。
+   * 未設定または空文字は「登録なし」を表す。
+   */
+  instagramUrl?: string;
+  /**
    * AI抽出の下書きで座標未確定(住所からジオコードできなかった)なら false。
    * 未設定の場合は確定済み扱い。false の間はレビュー画面で管理者がピンを置いて
    * 確定させるまで承認(published化)できない(requirements.md 2026-09-23決定)。
@@ -52,8 +59,9 @@ export const shopConverter: FirestoreDataConverter<Shop, ShopData> = {
       location: shop.location,
       closed: shop.closed,
       tagIds: shop.tagIds,
-      // Firestoreはundefined値のフィールドを書き込めないため、未設定(確定済み扱い)の
-      // 場合はキー自体を含めない。
+      // Firestoreはundefined値のフィールドを書き込めないため、未設定の場合は
+      // キー自体を含めない(instagramUrlはlocationConfirmedと同じ理由)。
+      ...(shop.instagramUrl !== undefined ? { instagramUrl: shop.instagramUrl } : {}),
       ...(shop.locationConfirmed !== undefined ? { locationConfirmed: shop.locationConfirmed } : {}),
       status: shop.status,
       createdAt: shop.createdAt,
@@ -71,6 +79,7 @@ export const shopConverter: FirestoreDataConverter<Shop, ShopData> = {
       location: data.location,
       closed: data.closed,
       tagIds: data.tagIds,
+      instagramUrl: data.instagramUrl,
       locationConfirmed: data.locationConfirmed,
       status: data.status,
       createdAt: data.createdAt,

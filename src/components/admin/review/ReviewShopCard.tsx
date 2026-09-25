@@ -28,6 +28,12 @@
  * 表示し、「店舗情報を保存」ボタンを押した時にtagIdsもまとめて保存する。承認処理
  * (親ページのhandleApprove)はtagIdsを一切書き換えない(既存published店舗を
  * 再利用したカードでも、管理者が保存を押した時だけ書き込む設計を維持)。
+ *
+ * Instagram URL(タスク6-2・P-020、requirements.md 2026-09-25決定): 店舗管理画面と同じ
+ * src/lib/validation.tsのvalidateInstagramUrlで検証するInstagram URL入力欄を表示し、
+ * 「店舗情報を保存」ボタンを押した時にinstagramUrlもまとめて保存する。AI抽出では
+ * 扱わないフィールドのため、承認処理(親ページのhandleApprove)は一切書き換えない
+ * (tagIdsと同じ設計方針)。
  */
 import { Timestamp } from "firebase/firestore";
 import dynamic from "next/dynamic";
@@ -37,6 +43,7 @@ import { TagCheckboxList } from "@/components/admin/TagCheckboxList";
 import { useAdminAuth } from "@/lib/admin-auth";
 import { geocodeAddress } from "@/lib/admin-geocode-client";
 import { updateShop } from "@/repositories/shops";
+import { validateInstagramUrl } from "@/lib/validation";
 import type { GeoLocation } from "@/types/common";
 import type { Shop } from "@/types/shop";
 import type { Tag } from "@/types/tag";
@@ -62,6 +69,8 @@ interface ShopInfoFormState {
   businessHours: string;
   infoAsOf: string; // <input type="date"> の値(YYYY-MM-DD)
   tagIds: string[];
+  /** タスク6-2・P-020: 店舗のInstagram URL(任意、空欄可) */
+  instagramUrl: string;
 }
 
 function errorMessage(error: unknown): string {
@@ -91,6 +100,7 @@ function toFormState(shop: Shop): ShopInfoFormState {
     businessHours: shop.businessHours,
     infoAsOf: timestampToDateInputValue(shop.infoAsOf),
     tagIds: shop.tagIds ?? [],
+    instagramUrl: shop.instagramUrl ?? "",
   };
 }
 
@@ -127,7 +137,11 @@ export function ReviewShopCard({ shop, allTags, onSaved }: ReviewShopCardProps) 
     if (infoAsOf === null) {
       nextErrors.push("情報基準日を入力してください");
     }
-    if (nextErrors.length > 0 || infoAsOf === null) {
+    const instagramResult = validateInstagramUrl(form.instagramUrl);
+    if (!instagramResult.ok) {
+      nextErrors.push(...instagramResult.errors);
+    }
+    if (nextErrors.length > 0 || infoAsOf === null || !instagramResult.ok) {
       setErrors(nextErrors);
       return;
     }
@@ -141,6 +155,7 @@ export function ReviewShopCard({ shop, allTags, onSaved }: ReviewShopCardProps) 
         businessHours: form.businessHours.trim(),
         infoAsOf,
         tagIds: form.tagIds,
+        instagramUrl: instagramResult.data,
       });
       onSaved();
     } catch (error) {
@@ -245,6 +260,17 @@ export function ReviewShopCard({ shop, allTags, onSaved }: ReviewShopCardProps) 
             type="date"
             value={form.infoAsOf}
             onChange={(event) => setForm({ ...form, infoAsOf: event.target.value })}
+            className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
+          />
+        </label>
+        <label className="flex min-w-64 flex-1 flex-col gap-1 text-sm text-zinc-700 dark:text-zinc-200">
+          Instagram URL(任意)
+          <input
+            data-testid="review-shop-instagram"
+            type="text"
+            placeholder="https://www.instagram.com/..."
+            value={form.instagramUrl}
+            onChange={(event) => setForm({ ...form, instagramUrl: event.target.value })}
             className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
           />
         </label>

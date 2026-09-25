@@ -639,7 +639,7 @@
 
 ## P-023: ピン直接クリックのE2Eがまれに "intercepts pointer events" でタイムアウトする
 - 記録日: 2026-09-25
-- 状態: 解決済み(詳細は下記)
+- 状態: 再調査中(2026-09-26 P-025で再発。6-1aの修正は不十分)
 - 発生箇所: e2e/detail-sheet.spec.ts・e2e/performer-filter.spec.ts のピン直接クリック(6-1実装時に実装担当が報告)
 - 問題内容:
   想定した動き: ピンのクリックが常に成功する
@@ -729,6 +729,11 @@
 - 解決日: 2026-09-25
 - 状態: 解決済み
 - 切り出したタスク: progress.txt タスク6-1a(原因特定と修正を1タスクで行う)
+- 再発(2026-09-26、P-025参照): 店舗間が約60〜90km離れた状態でモバイルのピンクリックが3/3で失敗。
+  メイン判断: 6-1aレビューでは「はみ出しは座標点から約34.5pxで一定(距離に依存しない)」と計測されており、
+  padding 96なら距離に関係なく収まるはず。距離で再発する事実はこの説明と矛盾するため、真の原因は未特定と判断。
+  実利用者でも店舗が離れている(東京以外の店舗が加わる等)とピンが押せない可能性がある。タスク6-1bで再調査・修正
+- 切り出したタスク(追加): progress.txt タスク6-1b
 
 ## P-024: 極端な並列負荷のE2Eで管理画面の画面遷移がタイムアウトする
 - 記録日: 2026-09-25
@@ -743,4 +748,62 @@
 - 原因調査: 未実施(レビュー担当の推測: 単一のFirestore Emulatorとdevサーバーが極端な負荷で逼迫)
 - 特定した原因: (未特定)
 - 切り出したタスク: (未定。通常のE2E運用では発生しないため、発生頻度が上がった時点で調査する)
+
+## P-025: E2Eに新規specを追加すると、P-023で「解決済み」としたピンクリックのintercept flakeが別テストで再発する
+- 記録日: 2026-09-26
+- 状態: P-023に統合(テスト座標の調整は回避策であり原因は未解決。6-1bで対応)
+- 発生箇所: フルE2E(npm run e2e相当、chromium-mobileプロジェクト)実行時の
+  e2e/sidebar-detail-sheet-layout.spec.ts「モバイルでは詳細シートが従来通り画面全幅で表示される
+  (左オフセットなし)」(shop-test-published-01のピンクリック)
+- 問題内容(タスク6-2レビュー中に発見、2026-09-26):
+  想定した動き: npm run e2e相当のフルE2Eは連続実行で常に全件PASSする
+  実際の動き: タスク6-2のレビュー用に作成したe2e/shop-instagram-link.spec.tsに、Instagram登録済み
+              店舗を実際にpublishして公開ページで検証するテストを追加したところ、chromium-mobile
+              プロジェクトでのフルE2E実行時にe2e/sidebar-detail-sheet-layout.spec.tsの
+              上記テストが3/3回連続で失敗するようになった(自spec単体・chromium-desktopでは
+              常に成功)
+- 再現手順:
+  1. e2e/shop-instagram-link.spec.tsに、seed店舗(shop-test-published-01: 35.6938, 139.7536)から
+     60〜90km程度離れた座標(例: 36.2/140.2、36.5/140.5、36.6/140.6)でInstagram登録店舗を
+     作成・公開するテストを追加する
+  2. `npx playwright test --project=chromium-mobile` (フルE2E)を実行する
+  3. e2e/sidebar-detail-sheet-layout.spec.ts:301のテストが高頻度(観測では3/3)で
+     "intercepts pointer events" 系のタイムアウトで失敗する
+- 原因調査(daychi-reviewで実施):
+  1. 具体的なケース: shop-instagram-link.spec.tsを一時的にe2e/から退避してフルE2E
+     (chromium-mobile)を実行すると65 passed / 8 skippedで全件成功。退避を戻すと3/3で
+     sidebar-detail-sheet-layout.spec.tsの上記テストが失敗する再現を確認した(退避あり/なしの
+     比較で因果関係を特定)
+  2. データフロー追跡: problem.txt P-023(タスク6-1a)の調査記録によれば、公開ページの
+     PublicMap.fitBounds()は「その時点で同時に公開されている全店舗」の座標範囲を基に縮尺を
+     決めるため、フルE2E実行中に他specが同時にpublishした店舗の座標次第でseed店舗
+     (shop-test-published-01)のピンが地図コンテナ上端をはみ出し、pointer-events-noneの
+     フィルタ帯を透過して背後の素のflexラッパーにクリックを奪われる。P-023の修正
+     (MAP_FIT_BOUNDS_PADDING 48→96)は「seed店舗から約44km離れた店舗が同時に公開されている」
+     ケースで200/200成功を検証済みだったが、今回追加したテストの座標(seed店舗から約60〜90km)は
+     この検証範囲を超えていた
+  3. 問題発生ステップ: e2e/shop-instagram-link.spec.tsが新たに追加した「公開ページの詳細シート」
+     系テスト(元々あった1件+レビューで追加した1件)が、フルE2E内で他のテストと同時に
+     遠方座標の店舗をpublishする時間帯が生じ、その間に別テストが公開ページを開くと
+     P-023と同じメカニズムでseed店舗のピンがはみ出す
+  4. コードを読んで原因を理解: src/components/map/PublicMap.tsxのfitBounds()呼び出し自体・
+     MAP_FIT_BOUNDS_PADDING(96)は変更せず、e2e/detail-sheet.spec.tsが既にP-023検証時の
+     安全座標として使っているDYNAMIC_SHOP_LAT/LNG(seed店舗近傍、遠方ではない値)と同じ方針に
+     揃っていないことがテスト側の原因であると判断した
+  5. 修正計画: e2e/shop-instagram-link.spec.tsの3つの公開検証(元からあった「詳細シートでは…」、
+     レビューで追加した「重点」)が使うInstagram登録店舗の座標を、seed店舗近傍(数km圏内、
+     35.70〜35.72/139.74〜139.77)に変更し、他specとの衝突は住所文字列(uniqueTestId)ではなく
+     座標そのものをわずかにずらすことで回避する。アプリ側(PublicMap.tsx・map-config.ts)は
+     変更しない(P-023の修正方針・スコープを維持し、今回はテスト側の座標選定の問題として扱う)
+- 修正: 上記計画の通りe2e/shop-instagram-link.spec.tsの座標を3箇所ともseed店舗近傍に変更した
+  (daychi-review内で実施。実装コードは変更していない)
+- 検証: 修正後、chromium-mobile / chromium-desktop それぞれでフルE2Eを連続3回実行し、
+  全件PASS(失敗0)を確認した(mobile: 65 passed / 8 skipped ×3、desktop: 66 passed / 7 skipped ×3)。
+  npm run typecheck / npm run lint / npm run test も全緑
+- 解決日: 2026-09-26
+- 残課題(未解決・優先度は今後判断): P-023の「解決済み」は座標差44km程度までの検証であり、
+  60km超では同じメカニズムで再発しうることが今回判明した。今後Phase 6以降でE2Eの店舗数・
+  座標バリエーションが増えるほど再発リスクが上がるため、(a) 新規E2Eの座標は seed店舗近傍に
+  揃えるルールを明文化する、または(b) MAP_FIT_BOUNDS_PADDINGをさらに引き上げる/店舗間距離に
+  応じた動的paddingにする、等の恒久対応の要否をユーザーに確認して判断する
 

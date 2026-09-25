@@ -25,14 +25,20 @@
  *   実際のNominatimへのネットワークアクセスに依存せず決定的に座標を検証する
  *   (e2e/shops-crud.spec.ts参照)。
  *
- * バリデーション: 店名・住所・情報基準日・緯度経度(数値)をそれぞれ検証し、
- * 不足項目をまとめてエラーメッセージ表示する。削除は確認ダイアログを挟む。
- * 作成・更新・公開切替の成功時は一時的な成功メッセージを表示する。
+ * バリデーション: 店名・住所・情報基準日・緯度経度(数値)・Instagram URL
+ * (タスク6-2、下記参照)をそれぞれ検証し、不足項目をまとめてエラーメッセージ表示する。
+ * 削除は確認ダイアログを挟む。作成・更新・公開切替の成功時は一時的な成功メッセージを表示する。
  *
  * タグ付与(タスク5-2): タグマスタ(tags)全件を読み込み、TagCheckboxList
  * (src/components/admin/TagCheckboxList.tsx、レビュー画面のReviewShopCardと共通)を
  * 作成・編集フォームにそれぞれ表示する。作成時はcreateForm.tagIds、編集時は
  * editForm.tagIdsをそのまま保存する(バリデーション対象外。空配列も許容)。
+ *
+ * Instagram URL(タスク6-2・P-020): shops.instagramUrl(任意)の作成・編集フォーム。
+ * src/lib/validation.tsのvalidateInstagramUrlで検証し(https://www.instagram.com/ の
+ * URLのみ許可、空欄可)、不正な場合はvalidateShopFormの他のエラーと合わせて表示する。
+ * AI抽出では扱わないためAI取り込みには追加しない(ReviewShopCardには別途タスク6-2で
+ * 同じバリデーション関数を使った入力欄を用意する)。
  */
 import { Timestamp } from "firebase/firestore";
 import dynamic from "next/dynamic";
@@ -51,7 +57,7 @@ import type { Tag } from "@/types/tag";
 import type { GeoLocation, PublishStatus } from "@/types/common";
 import { DEFAULT_MAP_CENTER } from "@/lib/map-config";
 import { useTransientMessage } from "@/lib/use-transient-message";
-import type { ValidationResult } from "@/lib/validation";
+import { validateInstagramUrl, type ValidationResult } from "@/lib/validation";
 
 // MapLibreはwindow/documentに依存するため、SSRでは描画せずクライアントでのみマウントする
 const ShopLocationPicker = dynamic(
@@ -79,6 +85,8 @@ interface ShopFormState {
   lat: string;
   lng: string;
   tagIds: string[];
+  /** タスク6-2・P-020: 店舗のInstagram URL(任意、空欄可) */
+  instagramUrl: string;
 }
 
 /** フォーム入力値のうちバリデーション・変換を通過した後の値(status/tagIdsは含まない) */
@@ -89,6 +97,7 @@ interface ParsedShopForm {
   infoAsOf: Timestamp;
   location: GeoLocation;
   closed: boolean;
+  instagramUrl: string;
 }
 
 const EMPTY_FORM: ShopFormState = {
@@ -100,6 +109,7 @@ const EMPTY_FORM: ShopFormState = {
   lat: String(DEFAULT_MAP_CENTER.lat),
   lng: String(DEFAULT_MAP_CENTER.lng),
   tagIds: [],
+  instagramUrl: "",
 };
 
 function errorMessage(error: unknown): string {
@@ -155,8 +165,18 @@ function validateShopForm(form: ShopFormState): ValidationResult<ParsedShopForm>
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     errors.push("住所からピンを立てるか、地図をクリック/ドラッグして座標を設定してください");
   }
+  const instagramResult = validateInstagramUrl(form.instagramUrl);
+  if (!instagramResult.ok) {
+    errors.push(...instagramResult.errors);
+  }
 
-  if (errors.length > 0 || infoAsOf === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+  if (
+    errors.length > 0 ||
+    infoAsOf === null ||
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng) ||
+    !instagramResult.ok
+  ) {
     return { ok: false, errors };
   }
   return {
@@ -168,6 +188,7 @@ function validateShopForm(form: ShopFormState): ValidationResult<ParsedShopForm>
       infoAsOf,
       location: { lat, lng },
       closed: form.closed,
+      instagramUrl: instagramResult.data,
     },
   };
 }
@@ -331,6 +352,7 @@ export default function AdminShopsPage() {
       lat: String(shop.location.lat),
       lng: String(shop.location.lng),
       tagIds: shop.tagIds ?? [],
+      instagramUrl: shop.instagramUrl ?? "",
     });
     setEditErrors([]);
     setEditGeocodeError(null);
@@ -498,6 +520,22 @@ export default function AdminShopsPage() {
               onChange={(event) => setCreateForm({ ...createForm, closed: event.target.checked })}
             />
             閉店
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex min-w-64 flex-1 flex-col gap-1 text-sm text-zinc-700 dark:text-zinc-200">
+            Instagram URL(任意)
+            <input
+              data-testid="shop-create-instagram"
+              type="text"
+              placeholder="https://www.instagram.com/..."
+              value={createForm.instagramUrl}
+              onChange={(event) =>
+                setCreateForm({ ...createForm, instagramUrl: event.target.value })
+              }
+              className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
+            />
           </label>
         </div>
 
@@ -671,6 +709,22 @@ export default function AdminShopsPage() {
                                 }
                               />
                               閉店
+                            </label>
+                          </div>
+
+                          <div className="flex flex-wrap items-end gap-3">
+                            <label className="flex min-w-64 flex-1 flex-col gap-1 text-zinc-700 dark:text-zinc-200">
+                              Instagram URL(任意)
+                              <input
+                                data-testid="shop-edit-instagram"
+                                type="text"
+                                placeholder="https://www.instagram.com/..."
+                                value={editForm.instagramUrl}
+                                onChange={(event) =>
+                                  setEditForm({ ...editForm, instagramUrl: event.target.value })
+                                }
+                                className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
+                              />
                             </label>
                           </div>
 

@@ -45,7 +45,17 @@
  *   src/lib/shop-filter.tsのresolveShopTags()に委譲する(shop.tagIdsにタグマスタへ
  *   存在しないID=削除済みタグが含まれていても無視して落ちない)。タグが1件も無い
  *   店舗では何も表示しない。
+ *
+ * タスク6-2で追加した表示項目(requirements.md 2026-09-25決定・P-020):
+ * - 店舗情報欄(住所・営業時間・情報基準日)の下部に、shop.instagramUrlが登録されて
+ *   いる場合のみInstagramアイコン(汎用的なカメラ形。Instagram公式ロゴは模倣しない。
+ *   src/components/icons/CameraIcon.tsx)を表示し、押すと新しいタブ(rel="noopener
+ *   noreferrer")で当該アカウントを開く。未登録(undefined/空文字)の店舗はアイコンを
+ *   表示しない。タスク6-3で「Googleマップで開く」ボタンが同じ行に横並びで追加される
+ *   予定のため、あらかじめflex行(detail-sheet-shop-actions)としてレイアウトを
+ *   用意しておく。
  */
+import { CameraIcon } from "@/components/icons/CameraIcon";
 import type { Performer } from "@/types/performer";
 import type { Shop } from "@/types/shop";
 import type { Tag } from "@/types/tag";
@@ -74,6 +84,8 @@ function resolvePerformerName(performers: Performer[], performerId: string): str
 export function DetailSheet({ shop, visitDetails, performers, tags, onClose }: DetailSheetProps) {
   const isOpen = shop !== null;
   const shopTags = shop === null ? [] : resolveShopTags(shop, tags);
+  const instagramUrl = shop?.instagramUrl?.trim() ?? "";
+  const hasInstagram = instagramUrl !== "";
 
   return (
     <>
@@ -207,6 +219,23 @@ export function DetailSheet({ shop, visitDetails, performers, tags, onClose }: D
               >
                 {formatInfoAsOf(shop.infoAsOf)}
               </p>
+
+              {/* タスク6-3で「Googleマップで開く」ボタンをこの行に追加する予定のため、
+                  常にflex行として用意しておく(上のコメント参照) */}
+              <div data-testid="detail-sheet-shop-actions" className="flex flex-wrap items-center gap-2 pt-1">
+                {hasInstagram && (
+                  <a
+                    data-testid="detail-sheet-instagram-link"
+                    href={instagramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Instagram"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300 text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                  >
+                    <CameraIcon className="h-5 w-5" />
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         )}

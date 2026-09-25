@@ -6,5 +6,36 @@
  * 配列(errors)を返し、呼び出し側は不足している項目をまとめて表示できる。
  * 実際のフィールドごとの検証ロジックは各画面のフォームによって異なるため、
  * このモジュールでは型のみを共有し、ロジックは各ページに留める。
+ *
+ * 例外として、複数画面(店舗管理フォーム/AI取り込みレビュー画面)で共通して使う
+ * shops.instagramUrl のバリデーション(validateInstagramUrl、タスク6-2・P-020)は
+ * ロジックの重複を避けるためこのモジュールに置く。
  */
 export type ValidationResult<T> = { ok: true; data: T } | { ok: false; errors: string[] };
+
+/**
+ * shops.instagramUrl として許可するURLの接頭辞。
+ * requirements.md「4. データモデル」shops.instagramUrl 参照
+ * (https://www.instagram.com/ のURLのみ受け付ける、2026-09-25決定)。
+ */
+export const INSTAGRAM_URL_PREFIX = "https://www.instagram.com/";
+
+/**
+ * 店舗のInstagram URL入力値を検証する(タスク6-2・P-020)。
+ * 前後の空白は除去する。空欄は「登録なし」として許可し、その場合は data: "" を返す
+ * (Shop.instagramUrlは未設定・空文字のどちらも「登録なし」として扱う仕様のため)。
+ * 入力がある場合は INSTAGRAM_URL_PREFIX から始まるURLのみ許可する。
+ */
+export function validateInstagramUrl(rawValue: string): ValidationResult<string> {
+  const value = rawValue.trim();
+  if (value === "") {
+    return { ok: true, data: "" };
+  }
+  if (!value.startsWith(INSTAGRAM_URL_PREFIX)) {
+    return {
+      ok: false,
+      errors: [`InstagramのURLは「${INSTAGRAM_URL_PREFIX}」から始まるURLのみ入力できます`],
+    };
+  }
+  return { ok: true, data: value };
+}
