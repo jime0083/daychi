@@ -22,11 +22,20 @@
  * 閉じる操作: 右上の閉じるボタン、またはシート外側のオーバーレイクリックのどちらでも
  * onCloseが呼ばれる(requirements.mdの「閉じるボタン(または地図クリック/オーバーレイ)」に対応)。
  * オーバーレイは地図を隠しすぎないよう薄い半透明にとどめる。
+ *
+ * タスク5-3で追加した表示項目:
+ * - 店名の近くに、その店舗に付与されたタグ名をorder昇順で表示する(requirements.md
+ *   「詳細シートの店名の近くに、その店舗のタグを表示する」)。タグの解決は
+ *   src/lib/shop-filter.tsのresolveShopTags()に委譲する(shop.tagIdsにタグマスタへ
+ *   存在しないID=削除済みタグが含まれていても無視して落ちない)。タグが1件も無い
+ *   店舗では何も表示しない。
  */
 import type { Performer } from "@/types/performer";
 import type { Shop } from "@/types/shop";
+import type { Tag } from "@/types/tag";
 import type { ShopVisitDetail } from "@/lib/shop-detail";
 import { formatDateJa, formatInfoAsOf } from "@/lib/date-format";
+import { resolveShopTags } from "@/lib/shop-filter";
 import { buildYoutubeThumbnailUrl, buildYoutubeWatchUrl } from "@/lib/youtube";
 
 interface DetailSheetProps {
@@ -36,6 +45,8 @@ interface DetailSheetProps {
   visitDetails: ShopVisitDetail[];
   /** performerId→出演者名の解決に使う出演者一覧 */
   performers: Performer[];
+  /** shop.tagIds→タグ名の解決に使うタグ一覧(全件) */
+  tags: Tag[];
   onClose: () => void;
 }
 
@@ -44,8 +55,9 @@ function resolvePerformerName(performers: Performer[], performerId: string): str
   return performers.find((performer) => performer.id === performerId)?.name ?? "(不明な出演者)";
 }
 
-export function DetailSheet({ shop, visitDetails, performers, onClose }: DetailSheetProps) {
+export function DetailSheet({ shop, visitDetails, performers, tags, onClose }: DetailSheetProps) {
   const isOpen = shop !== null;
+  const shopTags = shop === null ? [] : resolveShopTags(shop, tags);
 
   return (
     <>
@@ -82,6 +94,23 @@ export function DetailSheet({ shop, visitDetails, performers, onClose }: DetailS
                 閉じる
               </button>
             </div>
+
+            {shopTags.length > 0 && (
+              <ul
+                data-testid="detail-sheet-tags"
+                className="flex flex-wrap gap-1.5 text-xs text-zinc-600 dark:text-zinc-400"
+              >
+                {shopTags.map((tag) => (
+                  <li
+                    key={tag.id}
+                    data-testid="detail-sheet-tag"
+                    className="rounded-full bg-zinc-100 px-2 py-0.5 dark:bg-zinc-900"
+                  >
+                    {tag.name}
+                  </li>
+                ))}
+              </ul>
+            )}
 
             <div data-testid="detail-sheet-visits" className="flex flex-col gap-4">
               {visitDetails.length === 0 ? (

@@ -61,6 +61,21 @@
  *   src/components/map/PerformerFilter.tsxのコメント「レイアウト・重なり回避」を参照
  *   (地図のピンとフィルタパネルの画面座標が重なりクリックを奪い合うリグレッションの対策)。
  *
+ * タスク5-3で追加したデータフロー(タグフィルタ・詳細シートのタグ表示):
+ * - tags(タグマスタ全件)を新たに取得し、selectedTagIds(選択中のタグID一覧、複数選択可)を
+ *   保持する。TagFilter(PerformerFilterと同じ帯レイアウト。src/components/map/TagFilter.tsx
+ *   参照)のトグル操作で更新する。
+ * - src/lib/shop-filter.tsのcomputeFilteredShops()で、出演者フィルタ→タグフィルタの順に
+ *   連続適用したfilteredShopsを算出する(両方の関数とも選択0件なら絞り込みなしの部分集合を
+ *   返す純粋関数のため、連続適用するだけで「両方の条件を満たす店舗のみ」というAND結合になる。
+ *   requirements.md「出演者フィルタとタグフィルタを両方使う場合は、両方の条件を満たす店舗だけを
+ *   表示する」に対応)。
+ * - togglePerformerId/toggleTagIdのどちらも、変更後の両条件で絞り込んだ店舗一覧に選択中の
+ *   店舗が含まれなくなる場合はselectedShopIdをその場でnullに戻す(既存のtogglePerformerIdと
+ *   同じ設計判断。detail-sheetの自動クローズをタグフィルタ操作でも一貫させる)。
+ * - DetailSheetにtagsを渡し、店名近くにその店舗のタグ名(order昇順)を表示する
+ *   (src/lib/shop-filter.tsのresolveShopTags()。詳細はDetailSheet.tsxのコメント参照)。
+ *
  * タスク3-5で追加したデータフロー(モバイルUI: 画面下部タブで地図/動画一覧を切り替え):
  * - activeMobileTab("map" | "videos"、初期値"map")を新たに保持する。
  *   src/components/map/MobileTabBar.tsxの操作でのみ更新される。
@@ -94,18 +109,35 @@ import { DetailSheet } from "@/components/map/DetailSheet";
 import { MobileTabBar, type MobileTab } from "@/components/map/MobileTabBar";
 import { MobileVideoList } from "@/components/map/MobileVideoList";
 import { PerformerFilter } from "@/components/map/PerformerFilter";
+import { TagFilter } from "@/components/map/TagFilter";
 import { VideoSidebar } from "@/components/map/VideoSidebar";
 import { resolveShopVisitDetails } from "@/lib/shop-detail";
-import { filterShopsByPerformers } from "@/lib/shop-filter";
+import { filterShopsByPerformers, filterShopsByTags } from "@/lib/shop-filter";
 import { resolveVideoShopIds } from "@/lib/video-shop";
 import { listPerformers } from "@/repositories/performers";
 import { listPublishedShops } from "@/repositories/shops";
+import { listTags } from "@/repositories/tags";
 import { listPublishedVideos } from "@/repositories/videos";
 import { listPublishedVisits } from "@/repositories/visits";
 import type { Performer } from "@/types/performer";
 import type { Shop } from "@/types/shop";
+import type { Tag } from "@/types/tag";
 import type { Video } from "@/types/video";
 import type { Visit } from "@/types/visit";
+
+/**
+ * 出演者フィルタ→タグフィルタの順に連続適用し、両方の条件を満たす店舗一覧を返す
+ * (タスク5-3。src/lib/shop-filter.tsのコメント「出演者フィルタとタグフィルタの併用(AND)」参照)。
+ */
+function computeFilteredShops(
+  shops: Shop[],
+  visits: Visit[],
+  selectedPerformerIds: string[],
+  selectedTagIds: string[],
+): Shop[] {
+  const byPerformers = filterShopsByPerformers(shops, visits, selectedPerformerIds);
+  return filterShopsByTags(byPerformers, selectedTagIds);
+}
 
 const PublicMap = dynamic(() => import("@/components/map/PublicMap").then((mod) => mod.PublicMap), {
   ssr: false,
@@ -128,10 +160,12 @@ export default function Home() {
   const [visits, setVisits] = useState<Visit[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [performers, setPerformers] = useState<Performer[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [selectedPerformerIds, setSelectedPerformerIds] = useState<string[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>("map");
 
   // アンマウント後の setState を防ぐガード(/admin配下の各画面と同じパターン)
@@ -144,13 +178,20 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    Promise.all([listPublishedShops(), listPublishedVisits(), listPublishedVideos(), listPerformers()])
-      .then(([shopList, visitList, videoList, performerList]) => {
+    Promise.all([
+      listPublishedShops(),
+      listPublishedVisits(),
+      listPublishedVideos(),
+      listPerformers(),
+      listTags(),
+    ])
+      .then(([shopList, visitList, videoList, performerList, tagList]) => {
         if (mountedRef.current) {
           setShops(shopList);
           setVisits(visitList);
           setVideos(videoList);
           setPerformers(performerList);
+          setTags(tagList);
           setLoadError(null);
         }
       })
@@ -161,11 +202,11 @@ export default function Home() {
       });
   }, []);
 
-  // 出演者フィルタ(タスク3-4)で選択された出演者のいずれかが参加した
-  // published visitを持つ店舗のみに絞り込む(選択0件の場合は絞り込みなし=shopsそのまま)
+  // 出演者フィルタ(タスク3-4)・タグフィルタ(タスク5-3)で選択された条件を両方満たす
+  // 店舗のみに絞り込む(選択0件の場合はその条件については絞り込みなし)
   const filteredShops = useMemo(
-    () => filterShopsByPerformers(shops, visits, selectedPerformerIds),
-    [shops, visits, selectedPerformerIds],
+    () => computeFilteredShops(shops, visits, selectedPerformerIds, selectedTagIds),
+    [shops, visits, selectedPerformerIds, selectedTagIds],
   );
 
   const selectedShop = useMemo(
@@ -212,7 +253,20 @@ export default function Home() {
       : [...selectedPerformerIds, performerId];
     setSelectedPerformerIds(nextPerformerIds);
 
-    const nextFilteredShops = filterShopsByPerformers(shops, visits, nextPerformerIds);
+    const nextFilteredShops = computeFilteredShops(shops, visits, nextPerformerIds, selectedTagIds);
+    if (selectedShopId !== null && !nextFilteredShops.some((shop) => shop.id === selectedShopId)) {
+      setSelectedShopId(null);
+    }
+  }
+
+  // togglePerformerIdと同じ設計(タスク5-3: タグフィルタでも自動クローズを一貫させる)
+  function toggleTagId(tagId: string): void {
+    const nextTagIds = selectedTagIds.includes(tagId)
+      ? selectedTagIds.filter((id) => id !== tagId)
+      : [...selectedTagIds, tagId];
+    setSelectedTagIds(nextTagIds);
+
+    const nextFilteredShops = computeFilteredShops(shops, visits, selectedPerformerIds, nextTagIds);
     if (selectedShopId !== null && !nextFilteredShops.some((shop) => shop.id === selectedShopId)) {
       setSelectedShopId(null);
     }
@@ -234,6 +288,7 @@ export default function Home() {
           selectedPerformerIds={selectedPerformerIds}
           onTogglePerformer={togglePerformerId}
         />
+        <TagFilter tags={tags} selectedTagIds={selectedTagIds} onToggleTag={toggleTagId} />
         <div className="relative min-h-0 flex-1">
           {/* 地図ビュー: モバイルでは「地図」タブ選択時のみ表示(CSSのhiddenで切り替え、
               PublicMap自体はアンマウントしない。タスク3-5コメント参照)。デスクトップでは常に表示 */}
@@ -270,6 +325,7 @@ export default function Home() {
         shop={selectedShop}
         visitDetails={selectedShopVisitDetails}
         performers={performers}
+        tags={tags}
         onClose={closeDetailSheet}
       />
     </main>

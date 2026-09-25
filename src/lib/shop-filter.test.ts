@@ -5,13 +5,14 @@
 import { Timestamp } from "firebase/firestore";
 import { describe, expect, it } from "vitest";
 
-import { filterShopsByPerformers } from "@/lib/shop-filter";
+import { filterShopsByPerformers, filterShopsByTags, resolveShopTags } from "@/lib/shop-filter";
 import type { Shop } from "@/types/shop";
+import type { Tag } from "@/types/tag";
 import type { Visit } from "@/types/visit";
 
 const now = Timestamp.now();
 
-function makeShop(id: string): Shop {
+function makeShop(id: string, tagIds: string[] = []): Shop {
   return {
     id,
     name: `店舗${id}`,
@@ -20,11 +21,15 @@ function makeShop(id: string): Shop {
     infoAsOf: now,
     location: { lat: 35, lng: 139 },
     closed: false,
-    tagIds: [],
+    tagIds,
     status: "published",
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function makeTag(id: string, order: number): Tag {
+  return { id, name: `タグ${id}`, order };
 }
 
 function makeVisit(
@@ -125,5 +130,47 @@ describe("filterShopsByPerformers", () => {
   it("該当する訪問が無い場合は空配列を返す", () => {
     const shops = [makeShop("shop-1")];
     expect(filterShopsByPerformers(shops, [], ["performer-none"])).toEqual([]);
+  });
+});
+
+describe("filterShopsByTags", () => {
+  it("選択タグが0件の場合は絞り込まず全店舗を返す", () => {
+    const shops = [makeShop("shop-1", ["tag-a"]), makeShop("shop-2")];
+    expect(filterShopsByTags(shops, [])).toEqual(shops);
+  });
+
+  it("選択タグが付いた店舗のみ返す", () => {
+    const shops = [makeShop("shop-1", ["tag-a"]), makeShop("shop-2", ["tag-b"]), makeShop("shop-3")];
+    expect(filterShopsByTags(shops, ["tag-a"])).toEqual([shops[0]]);
+  });
+
+  it("複数選択時はOR絞り込み(いずれかのタグが付いていれば表示)になる", () => {
+    const shops = [makeShop("shop-1", ["tag-a"]), makeShop("shop-2", ["tag-b"]), makeShop("shop-3")];
+    expect(filterShopsByTags(shops, ["tag-a", "tag-b"])).toEqual([shops[0], shops[1]]);
+  });
+
+  it("該当するタグが付いた店舗が無い場合は空配列を返す", () => {
+    const shops = [makeShop("shop-1", ["tag-a"])];
+    expect(filterShopsByTags(shops, ["tag-none"])).toEqual([]);
+  });
+});
+
+describe("resolveShopTags", () => {
+  it("shopに付与されたタグをorder昇順で返す", () => {
+    const tags = [makeTag("tag-b", 2), makeTag("tag-a", 1), makeTag("tag-c", 3)];
+    const shop = makeShop("shop-1", ["tag-c", "tag-a"]);
+    expect(resolveShopTags(shop, tags)).toEqual([tags[1], tags[2]]);
+  });
+
+  it("タグが無い店舗は空配列を返す", () => {
+    const tags = [makeTag("tag-a", 1)];
+    const shop = makeShop("shop-1", []);
+    expect(resolveShopTags(shop, tags)).toEqual([]);
+  });
+
+  it("tagIdsにタグマスタへ存在しないIDが含まれていても無視する", () => {
+    const tags = [makeTag("tag-a", 1)];
+    const shop = makeShop("shop-1", ["tag-deleted", "tag-a"]);
+    expect(resolveShopTags(shop, tags)).toEqual([tags[0]]);
   });
 });
