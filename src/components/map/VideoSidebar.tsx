@@ -16,6 +16,24 @@
  *   該当アイテムに data-selected="true" とハイライト背景を付与する。
  * - 各アイテムには data-testid="sidebar-video-item" と data-video-id を付与し、
  *   E2Eで動画IDベースに特定・クリックできるようにする。
+ *
+ * 詳細シートとの重なり対策(タスク6-1・P-019、daychi-review FAIL 1回目 2026-09-25対応):
+ * - 当初、動画クリックで詳細シート(DetailSheet)も開くようになったことに対応するため、
+ *   このサイドバー自体にDetailSheetのオーバーレイ(z-40)より高いz-index(z-[60])と
+ *   pointer-events-noneを付与する対応を試みたが、この方式だとサイドバー自体が
+ *   常にオーバーレイ・シートより手前に描画されてしまい、動画本数が多い場合
+ *   (E2Eレビューで5件以上のケースを確認)にサイドバーの各アイテムが詳細シートの
+ *   店名・サムネイル・動画リンク等を覆い隠し、`detail-sheet-video-link` 等への
+ *   クリックが奪われるリグレッションが判明した(既存specは動画3件以下のみで
+ *   発覚しなかった)。
+ * - そのため、このサイドバー側でz-index/pointer-eventsを操作する方式は撤回し、
+ *   代わりにrequirements.md「PCでは詳細シートと背景の暗転を地図部分(左の動画一覧の
+ *   右側)の幅だけに表示し、シートを開いたまま動画一覧をスクロール・クリックできる
+ *   ようにする」(2026-09-25決定)の通り、DetailSheet側(src/components/map/DetailSheet.tsx)の
+ *   オーバーレイ・シート本体の横幅をPC(md以上)ではこのサイドバーの幅(w-72)の分だけ
+ *   右にオフセットする対応に変更した。これによりPCではオーバーレイ・シートがこの
+ *   サイドバーの領域と幾何学的に重ならなくなるため、このサイドバー自体には
+ *   z-index/pointer-eventsの特別な指定が一切不要になる(通常のflow配置のまま)。
  */
 import { formatDateJa } from "@/lib/date-format";
 import { buildYoutubeThumbnailUrl } from "@/lib/youtube";

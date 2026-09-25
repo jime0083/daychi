@@ -16,6 +16,11 @@ import { mockGeocode } from "./support/geocode-mock";
  * - 動画をクリックすると、その動画で紹介された店舗のピンがハイライトされること
  *   (1動画1店舗、1動画複数店舗の両方のケース)
  * - モバイル幅ではサイドバーが表示されない(地図が全画面のまま)こと
+ * - タスク6-1(P-019)追加分: 動画をクリックすると、紹介店舗が1件かつ絞り込み後も
+ *   表示されている場合はその店舗の詳細シートも開くこと。紹介店舗が2件以上の場合は
+ *   シートを開かず(既に開いていた別店舗のシートがあれば閉じる)こと。出演者/タグの
+ *   絞り込みで地図に表示されていない店舗は、紹介店舗が1件でもシートを開かないこと
+ *   (requirements.md「3.1 公開ページ」2026-09-25決定)
  * を検証する。
  *
  * ハイライトの検証は、地図のflyTo/fitBoundsアニメーション完了やタイル描画結果に
@@ -269,25 +274,72 @@ test.describe("サイドバー動画一覧", () => {
     await expect(pinA).toHaveAttribute("data-highlighted", "false");
     await expect(pinB).toHaveAttribute("data-highlighted", "false");
 
-    // oldVideo(shopAのみ紹介)をクリック→shopAのみハイライトされる
+    // 初期状態では詳細シートは開いていない
+    await expect(page.getByTestId("detail-sheet-shop-name")).toHaveCount(0);
+
+    // oldVideo(shopAのみ紹介)をクリック→shopAのみハイライトされ、shopAの詳細シートも開く
+    // (タスク6-1: 紹介店舗が1件かつ絞り込み後も表示されているため)
     await oldItem.click();
     await expect(pinA).toHaveAttribute("data-highlighted", "true");
     await expect(pinB).toHaveAttribute("data-highlighted", "false");
     await expect(oldItem).toHaveAttribute("data-selected", "true");
+    await expect(page.getByTestId("detail-sheet-shop-name")).toHaveText(shopAName);
 
-    // newVideo(shopA・shopB両方を紹介)をクリック→両方ハイライトされる(複数店舗ケース)
+    // newVideo(shopA・shopB両方を紹介)をクリック→両方ハイライトされる(複数店舗ケース)。
+    // 紹介店舗が2件のためシートは開かず、直前に開いていたshopAのシートも閉じる(タスク6-1)
     await newItem.click();
     await expect(pinA).toHaveAttribute("data-highlighted", "true");
     await expect(pinB).toHaveAttribute("data-highlighted", "true");
     await expect(newItem).toHaveAttribute("data-selected", "true");
     await expect(oldItem).toHaveAttribute("data-selected", "false");
+    await expect(page.getByTestId("detail-sheet-shop-name")).toHaveCount(0);
 
     // seedの動画(dAyChiTEST1、shop-test-published-01のみ紹介)をクリック→
-    // 直前のハイライト(shopA・shopB)が解除され、shop-test-published-01のみハイライトされる
+    // 直前のハイライト(shopA・shopB)が解除され、shop-test-published-01のみハイライトされる。
+    // 注意: dAyChiTEST1はe2e/tag-filter.spec.ts・e2e/performer-filter.spec.tsが並行実行時に
+    // 一時的な訪問を追加で紐付けることがある共有動画のため(各specの後片付けで削除される)、
+    // このテストでは「紹介店舗が2件以上になり得る」前提でハイライトのみ検証し、詳細シートの
+    // 開閉(紹介店舗が常に1件である前提)はここでは検証しない(自己完結したshopA/oldVideoで
+    // 既に検証済み)。
     await seedItem.click();
     await expect(pinSeed).toHaveAttribute("data-highlighted", "true");
     await expect(pinA).toHaveAttribute("data-highlighted", "false");
     await expect(pinB).toHaveAttribute("data-highlighted", "false");
+
+    // タスク6-1: 出演者/タグの絞り込みで地図に表示されていない店舗は、紹介店舗が1件でも
+    // シートを開かない。shopA/shopBは自己完結した(このテストが作成した)店舗で、
+    // タグを一切付与していないため、いずれかのタグを選択すると絞り込みで非表示になる。
+    // tag-test-assigned(scripts/seed.ts参照。P-018によりタグ自体は読み取り専用で参照する
+    // だけで変更しない)を選択する
+    const assignedTagOption = page.locator(
+      '[data-testid="tag-filter-option"][data-tag-id="tag-test-assigned"]',
+    );
+    await assignedTagOption.locator("input[type=checkbox]").check();
+    await expect(assignedTagOption).toHaveAttribute("data-selected", "true");
+    await expect(pinA).toHaveCount(0);
+    await expect(pinB).toHaveCount(0);
+
+    // oldVideo(shopAのみ紹介)を再クリック→まずshopAの詳細シートを開いた状態を作る
+    // (絞り込み前と同じ理由で、タグ絞り込み中はshopAのピン自体が無いため、いったん解除して
+    // シートを開いてから絞り込みを掛け直し、「絞り込みで非表示になった店舗のシートは
+    // 自動的に閉じる」ことを検証する)
+    await assignedTagOption.locator("input[type=checkbox]").uncheck();
+    await expect(pinA).toHaveCount(1);
+    await oldItem.click();
+    await expect(page.getByTestId("detail-sheet-shop-name")).toHaveText(shopAName);
+
+    // タグ絞り込みを再度掛けるとshopAが非表示になり、開いていたshopAのシートも閉じる
+    // (無関係になった店舗のシートが開いたままにならないようにするため)
+    await assignedTagOption.locator("input[type=checkbox]").check();
+    await expect(pinA).toHaveCount(0);
+    await expect(page.getByTestId("detail-sheet-shop-name")).toHaveCount(0);
+
+    // oldVideo(shopAのみ紹介、絞り込みで非表示)を再クリックしてもシートは開かない
+    await oldItem.click();
+    await expect(page.getByTestId("detail-sheet-shop-name")).toHaveCount(0);
+
+    // 後続の後片付け操作に影響しないようタグ絞り込みを解除しておく
+    await assignedTagOption.locator("input[type=checkbox]").uncheck();
 
     // --- 後片付け: 管理画面から作成した訪問・動画・店舗をすべて削除する ---
     await page.goto("/admin");

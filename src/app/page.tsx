@@ -33,8 +33,9 @@
  *   VideoSidebar.tsx内のTailwindクラスで制御)。地図(PublicMap)はサイドバーの
  *   隣にflex-1で配置し、モバイルではサイドバーが非表示になるため全画面になる。
  * - selectedVideoId(サイドバーで選択中の動画)を新たに保持する。これは
- *   selectedShopId(詳細シート用)とは独立した状態であり、互いに干渉しない
- *   (動画クリックは詳細シートを開閉しない。ピンクリックはサイドバーの選択状態を変えない)。
+ *   selectedShopId(詳細シート用)とは独立した状態だが、タスク6-1(下記)で
+ *   動画クリック時にselectedShopIdも連動して更新するようになった
+ *   (ピンクリックは引き続きサイドバーの選択状態を変えない。この向きの独立性は維持)。
  * - selectedVideoIdからsrc/lib/video-shop.tsのresolveVideoShopIds()で
  *   「その動画で紹介されたpublished visitのshopId群」を算出し、
  *   PublicMapのhighlightedShopIdsに渡す(ピンのハイライト表示 + 地図フォーカスの両方に使う)。
@@ -101,6 +102,22 @@
  *   地図のピン表示に対する機能のため、動画一覧タブ中でも表示したままにして
  *   タブ切り替えのたびに出し分けるコストを避ける。実害はない: 動画一覧タブ表示中に
  *   フィルタを操作しても、地図タブに戻ればその絞り込みが反映された状態で表示される)。
+ *
+ * タスク6-1で追加したデータフロー(動画クリックで詳細シートも開く。P-019):
+ * - requirements.md「動画をクリックすると、あわせてその店舗の詳細シートも
+ *   スライドアップする(PCサイドバー・モバイル動画一覧タブ共通)。出演者/タグの
+ *   絞り込みで地図に表示されていない店舗のシートは開かない。1動画で複数店舗を
+ *   紹介する動画は現状ないため考慮しない」(2026-09-25決定)に対応する。
+ * - handleVideoClick内で、src/lib/video-shop.tsのresolveVideoClickShopId()に
+ *   videoId・visits・現在のfilteredShops(出演者/タグ絞り込み後に地図へ表示中の
+ *   店舗一覧)を渡し、その結果(店舗ID、または開かないことを示すnull)を
+ *   そのままsetSelectedShopIdに渡す。条件を満たさない場合(紹介店舗が0件/複数件、
+ *   または絞り込みで非表示)はnullが返るため、動画クリック前に別の店舗の詳細シートが
+ *   開いていた場合はそのシートも閉じる(クリックした動画と無関係な店舗のシートが
+ *   開いたままにならないようにするための設計判断。togglePerformerId/toggleTagIdの
+ *   自動クローズと同じ考え方)。
+ * - デスクトップ(VideoSidebar)・モバイル(MobileVideoList、地図タブへの自動切り替え後)の
+ *   どちらもhandleVideoClickを共用するため、この動作は両方に同時に反映される。
  */
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -113,7 +130,7 @@ import { TagFilter } from "@/components/map/TagFilter";
 import { VideoSidebar } from "@/components/map/VideoSidebar";
 import { resolveShopVisitDetails } from "@/lib/shop-detail";
 import { filterShopsByPerformers, filterShopsByTags } from "@/lib/shop-filter";
-import { resolveVideoShopIds } from "@/lib/video-shop";
+import { resolveVideoClickShopId, resolveVideoShopIds } from "@/lib/video-shop";
 import { listPerformers } from "@/repositories/performers";
 import { listPublishedShops } from "@/repositories/shops";
 import { listTags } from "@/repositories/tags";
@@ -238,10 +255,18 @@ export default function Home() {
 
   // 動画一覧(デスクトップのVideoSidebar/モバイルのMobileVideoListの両方で共用)クリック時:
   // 従来通り地図フォーカス・ハイライトの対象動画を更新しつつ、モバイルでは地図タブに
-  // 切り替える(デスクトップではタブ自体を表示しないため見た目に影響しない)
+  // 切り替える(デスクトップではタブ自体を表示しないため見た目に影響しない)。
+  // タスク6-1(P-019)で追加: あわせて詳細シートの表示状態も更新する。
+  // resolveVideoClickShopId()(src/lib/video-shop.ts)が「その動画で紹介された
+  // published店舗が1件、かつ出演者/タグ絞り込み後もfilteredShopsに含まれる」場合のみ
+  // 店舗IDを返し、それ以外(0件/複数件/絞り込みで非表示)はnullを返す。
+  // 常にsetSelectedShopId()を呼ぶことで、条件を満たさない場合は無関係な店舗の
+  // 詳細シートが開いたままにならないよう閉じる(nullなら閉じる、既に閉じていれば
+  // no-op)設計としている(togglePerformerId/toggleTagIdの自動クローズと同じ考え方)。
   function handleVideoClick(videoId: string): void {
     setSelectedVideoId(videoId);
     setActiveMobileTab("map");
+    setSelectedShopId(resolveVideoClickShopId(videoId, visits, filteredShops));
   }
 
   // フィルタ変更で表示対象から外れた店舗の詳細シートが開いたままにならないよう、

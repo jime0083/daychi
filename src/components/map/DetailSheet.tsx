@@ -23,6 +23,22 @@
  * onCloseが呼ばれる(requirements.mdの「閉じるボタン(または地図クリック/オーバーレイ)」に対応)。
  * オーバーレイは地図を隠しすぎないよう薄い半透明にとどめる。
  *
+ * PCでの表示幅(タスク6-1・P-019、daychi-review FAIL 1回目 2026-09-25対応):
+ * - requirements.md「PCでは詳細シートと背景の暗転を地図部分(左の動画一覧の右側)の
+ *   幅だけに表示し、シートを開いたまま動画一覧をスクロール・クリックできるように
+ *   する」(2026-09-25決定)に対応する。
+ * - タスク6-1で動画クリック時にもこのシートが開くようになったが、動画本数が多い場合
+ *   (E2Eレビューで5件以上のケースを確認)、シートが画面全幅(左のVideoSidebarの上にも
+ *   重なる)だと、シートを開いたまま別の動画をクリックしようとした際にシート側の
+ *   要素(店名・サムネイル等)が動画一覧のクリックを奪ってしまうリグレッションが
+ *   あった(src/components/map/VideoSidebar.tsxのコメント参照。既存specは動画3件以下
+ *   だったため発覚しなかった)。
+ * - そのためオーバーレイ・シート本体の左端を、PC(md以上)ではVideoSidebarの幅
+ *   (w-72 = 18rem)と一致する `md:left-72` でオフセットする。モバイル(md未満、
+ *   VideoSidebar自体が非表示)では従来通り画面全幅(inset-x-0)のままとする。
+ *   これによりPCではオーバーレイ・シートがVideoSidebarの領域と幾何学的に重ならなく
+ *   なるため、VideoSidebar側でz-index/pointer-eventsを操作する必要が無くなる。
+ *
  * タスク5-3で追加した表示項目:
  * - 店名の近くに、その店舗に付与されたタグ名をorder昇順で表示する(requirements.md
  *   「詳細シートの店名の近くに、その店舗のタグを表示する」)。タグの解決は
@@ -64,14 +80,18 @@ export function DetailSheet({ shop, visitDetails, performers, tags, onClose }: D
       {isOpen && (
         <div
           data-testid="detail-sheet-overlay"
-          className="fixed inset-0 z-40 bg-black/20"
+          // md:left-72: 上のコメント「PCでの表示幅」参照。PCではVideoSidebar(w-72)の
+          // 右側(地図部分)だけを覆う。モバイルはVideoSidebar自体が非表示のため
+          // 従来通りinset-0のまま(左端は0)
+          className="fixed inset-0 z-40 bg-black/20 md:left-72"
           onClick={onClose}
         />
       )}
       <div
         data-testid="detail-sheet"
         aria-hidden={!isOpen}
-        className={`fixed inset-x-0 bottom-0 z-50 max-h-[80vh] overflow-y-auto rounded-t-2xl bg-white shadow-lg transition-transform duration-300 ease-out dark:bg-zinc-950 ${
+        // md:left-72: オーバーレイと同じ理由(上のコメント参照)
+        className={`fixed inset-x-0 bottom-0 z-50 max-h-[80vh] overflow-y-auto rounded-t-2xl bg-white shadow-lg transition-transform duration-300 ease-out md:left-72 dark:bg-zinc-950 ${
           isOpen ? "translate-y-0" : "pointer-events-none translate-y-full"
         }`}
       >
