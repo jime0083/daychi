@@ -616,3 +616,37 @@
   1,000回あたり20ドルの費用が発生するため、A案(地図はMapLibreのまま、営業時間は任意入力+空欄時は
   Googleマップへ案内、Place IDは任意で紐付け)に決定
 - 切り出したタスク: progress.txt タスク6-3
+
+## P-022: npm run typecheck / npm run e2e がレビュー用の一時テストファイルで失敗する
+- 記録日: 2026-09-25
+- 状態: 解決済み
+- 発生箇所: e2e/artifacts/prod-smoke-5-3/(6-1実装時に実装担当が報告)
+- 問題内容:
+  想定した動き: typecheck・e2e はリポジトリのコードだけを対象に通る
+  実際の動き: e2e/artifacts/prod-smoke-5-3/prod-smoke.spec.ts の型エラー(TS2322)で typecheck が失敗し、
+              npm run e2e でもこのspecが実行されて失敗する
+- 再現手順: 5-3本番確認後の状態で npm run typecheck / npm run e2e を実行
+- 原因調査:
+  - 5-3の本番スモーク時、レビュー担当が一時spec/configを e2e/artifacts/prod-smoke-5-3/ に作成し残した
+    (gitignore対象のため git status に出ず、後片付け漏れに気付けなかった)
+  - tsconfig.json の include が "**/*.ts" で gitignore配下も型チェック対象になる。playwright.config.ts の
+    testDir "./e2e" は e2e/artifacts 配下の *.spec.ts も実行対象にする
+- 特定した原因: レビュー用の一時ファイルを、型チェック・E2Eの対象範囲内(gitignore配下)に置いたこと
+- 切り出したタスク: なし(一時ファイルの退避のみで解消。以後、レビュー担当への依頼で一時ファイルは
+  セッションのscratchpadに置くかリポジトリ外で作成し、終了後に削除することを明示する)
+- 解決日: 2026-09-25
+- 解決内容: 2ファイルをリポジトリ外(セッションscratchpad)へ退避。e2e/artifacts 配下に *.ts が残っていないことを確認
+
+## P-023: ピン直接クリックのE2Eがまれに "intercepts pointer events" でタイムアウトする
+- 記録日: 2026-09-25
+- 状態: 調査中
+- 発生箇所: e2e/detail-sheet.spec.ts・e2e/performer-filter.spec.ts のピン直接クリック(6-1実装時に実装担当が報告)
+- 問題内容:
+  想定した動き: ピンのクリックが常に成功する
+  実際の動き: ごくまれに別要素がクリックを奪う("intercepts pointer events")としてタイムアウトする
+- 再現手順: npm run e2e を繰り返し実行(低頻度)
+- 原因調査:
+  - 実装担当の報告: 6-1の変更を git stash で除いた状態でも同じ頻度で再現(既存事象の可能性)
+  - 5-1〜5-3・5-1aのレビューでの複数回のフル実行では未発生。どの要素がクリックを奪っているかは未特定
+- 特定した原因: (未特定。6-1レビューで発生頻度と奪っている要素を採取して特定する)
+- 切り出したタスク: (原因特定後に記載)
