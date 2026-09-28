@@ -901,8 +901,7 @@
 ## P-026: フルE2E実行中、firebase-adminのfirestore動的importがNode.jsのESM/CJS相互運用バグで
   中頻度(観測で約25〜30%)に失敗する
 - 記録日: 2026-09-26
-- 状態: 未着手(タスク6-1bの検証中に発見・原因特定済み。6-1bの変更範囲外の既存事象のため
-  6-1bでは修正しない。別タスクとして切り出しが必要)
+- 状態: 解決済み
 - 発生箇所: e2e/support/firestore-raw.ts:59(`await import("firebase-admin/firestore")`)。
   タスク6-2で導入されたヘルパー。呼び出し元はe2e/shop-instagram-link.spec.tsの
   「【重点】…」テストのみ(まれに同ファイルの別テストでも類似の不安定さが観測された)
@@ -938,19 +937,41 @@
   firebase-admin経由でCJSモジュールが`require()`で.jsonファイルを読み込む際に、
   動的import()の初回実行時のタイミング次第でモジュールキャッシュの同期に失敗する
   既知のバグ。アプリケーションコード・E2Eテストのロジックの欠陥ではない
-- 切り出したタスク: 未定(次にこの領域を触るタスクの際にprogress.txtへ追加を検討)。
-  候補となる恒久対応: (a) e2e/support/firestore-raw.tsの`await import("firebase-admin/firestore")`
-  等の動的importを、ファイル先頭の静的importに変更する(静的ESM importはモジュール実行前に
-  解決されるため、この「非同期関数内での初回動的import」特有のタイミング競合を回避できる
-  可能性が高い。ただし他のe2e/support配下ファイルが同種の動的importパターンを採用している
-  理由が不明なため、変更前にその理由の確認が必要)、(b) Node.jsのバージョンを更新する、
-  (c) firebase-admin依存を避けてクライアントSDK+Emulator直読みに置き換える、等
+- 切り出したタスク: progress.txt タスク6-1c
 - 6-1bでの扱い: 上記の通り原因を特定したが、修正はタスク範囲外のため実施していない。
   このためタスク6-1bの「フルE2E連続3回失敗0」の検証は、このP-026の影響を受けない
   desktop/mobile個別実行や、6-1b固有のspec(distant-shop-pin-click.spec.ts)の
   繰り返し実行(--repeat-each=5、chromium-desktop/mobile合計10件全PASS)で6-1b自体の
   修正の妥当性を確認したうえで、フルE2E全体としては連続実行の一部でP-026が発生しうることを
   daychi-review/ユーザーに申し送る
+- タスク6-1cでの追加調査(候補(a)の「他のe2e/support配下ファイルが同種の動的import
+  パターンを採用している理由が不明」の解消): e2e/support/emulator-auth.tsの
+  resolveEmulatorProjectId()も`await import("@/lib/firebase-config")`という動的importを
+  使っているが、これはfirebase-adminではなく自プロジェクトの純粋関数モジュール
+  (@/lib/firebase-config、外部CJSパッケージへの依存なし)を対象にしたものであり、
+  本問題の原因(firebase-admin内部がCJSの@grpc/proto-loader経由でprotobufjsの.jsonを
+  require()する箇所でのESM/CJS相互運用競合)とは無関係と確認した。すなわち「動的import
+  であること」自体が問題なのではなく、「動的importの対象がfirebase-admin(内部にCJSの
+  require()連鎖を持つ重いネイティブ依存パッケージ)であること」が原因であり、
+  他のe2e/support配下ファイルの動的importパターンは無害と判断できる
+- 解決日: 2026-09-28
+- 解決内容:
+  e2e/support/firestore-raw.tsから`await import("firebase-admin/firestore")`
+  および`await import("firebase-admin/app")`(firebase-admin/CJS経路)を撤去し、
+  他のspec(e2e/tags-crud.spec.ts、e2e/admin-import-existing-shop.spec.ts、
+  e2e/distant-shop-pin-click.spec.ts等)と同じ@firebase/rules-unit-testing
+  (initializeTestEnvironment + withSecurityRulesDisabled)+firebase/firestore
+  (クライアントSDK)方式に書き換えた(静的importのみで構成、firebase-admin非依存)。
+  「クライアントSDKのコンバータを経由しない生データ読み取り」という目的は、
+  withSecurityRulesDisabled()で得たFirestoreインスタンスに対し
+  withConverter()を使わず素の collection()/getDocs() で読む形で維持した
+  (withSecurityRulesDisabled()はコールバックの戻り値を伝播しない実装のため、
+  結果はコールバック外の変数に書き込んで受け取る形にした)。
+  検証: e2e/shop-instagram-link.spec.ts(firestore-raw.tsの唯一の呼び出し元)を
+  --repeat-each=10でchromium-desktop/chromium-mobileそれぞれ実行し40件×2=80件全PASS
+  (P-026シグネチャの失敗0)。npm run e2e(フルE2E)を5回連続実行し、全て133 passed/
+  15 skippedで失敗0(P-026・P-027いずれのシグネチャの失敗も0回)。
+  npm run typecheck / lint / test も全て緑
 
 ## P-027: Instagram URLを空欄にして保存した後、編集フォームを開き直すと前の値が表示されることがある
 - 記録日: 2026-09-28

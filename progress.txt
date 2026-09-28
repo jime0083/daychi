@@ -426,7 +426,8 @@ Phase 6: 改善(ユーザーフィードバック 2026-09-25)
     ※進捗(2026-09-28): 6-1b本体(アプリ非改変・E2Eは拡大してから押す・400km店舗E2E)はレビューで全観点を確認済み。
       フルE2E連続3回失敗0の完了条件のみ、P-026(6-1c)・P-027(6-1d)解消後に確認して完了とする
 
-[ ] 6-1c テスト用firestore-raw補助の読み込み失敗の解消(P-026)
+[x] 6-1c テスト用firestore-raw補助の読み込み失敗の解消(P-026)
+    ※完了(2026-09-28): daychi-review PASS(firebase-admin非依存に置換。該当spec 80/80、フルE2E連続3回失敗0)
     内容: e2e/support/firestore-raw.ts の firebase-admin 動的importが、フルE2E実行時に約25〜30%で
           Node.jsのESM/CJS相互運用の不具合により失敗する。原因を確認のうえ、読み込み方を直す
           (他specと同じ @firebase/rules-unit-testing 方式への置き換え等)
