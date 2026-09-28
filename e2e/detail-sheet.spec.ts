@@ -4,6 +4,7 @@ import { uniqueTestId } from "@/repositories/test-support";
 
 import { createEmulatorTestUser } from "./support/emulator-auth";
 import { mockGeocode } from "./support/geocode-mock";
+import { clickMapPinWithZoom } from "./support/pin-click";
 
 /**
  * タスク3-2(スライドアップ詳細シート)のE2Eテスト。
@@ -71,7 +72,11 @@ async function openDetailSheetForPublishedShop(page: Page): Promise<void> {
 
   const pin = page.locator('[data-testid="map-pin"][data-shop-id="shop-test-published-01"]');
   await expect(pin).toHaveCount(1);
-  await pin.click();
+  // タスク6-1b(P-023再発・P-025)対応: requirements.mdの2026-09-26決定により、店舗が
+  // 広範囲に散らばっている状態ではピンの重なりはそのまま(一般的な地図と同じ)であり、
+  // 他specが並行して遠方の店舗を公開しているとこのピンが別の店舗のピンの後ろに隠れうる。
+  // 実際の利用者と同じく必要なら地図を拡大してからクリックする(e2e/support/pin-click.ts参照)
+  await clickMapPinWithZoom(page, pin);
 }
 
 /**

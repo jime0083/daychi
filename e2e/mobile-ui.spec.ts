@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { clickMapPinWithZoom } from "./support/pin-click";
+
 /**
  * タスク3-5(モバイルUI)のE2Eテスト。
  *
@@ -176,7 +178,8 @@ test.describe("モバイルUI(画面下部タブ)", () => {
     // 初期表示(地図タブ)のままピンをタップできる
     const pin = page.locator('[data-testid="map-pin"][data-shop-id="shop-test-published-01"]');
     await expect(pin).toBeVisible();
-    await pin.click();
+    // タスク6-1b(P-023再発・P-025)対応: e2e/support/pin-click.ts参照
+    await clickMapPinWithZoom(page, pin);
 
     await expect(page.getByTestId("detail-sheet-shop-name")).toBeVisible();
     await expect(page.getByTestId("detail-sheet-shop-name")).toHaveText(

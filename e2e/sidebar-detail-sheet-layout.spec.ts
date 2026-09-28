@@ -9,6 +9,7 @@ import { FIRESTORE_EMULATOR_HOST, FIRESTORE_EMULATOR_PORT } from "@/lib/firebase
 
 import { createEmulatorTestUser } from "./support/emulator-auth";
 import { mockGeocode } from "./support/geocode-mock";
+import { clickMapPinWithZoom } from "./support/pin-click";
 
 /**
  * タスク6-1(P-019)daychi-review FAIL 1回目(2026-09-25)対応の追加E2E。
@@ -312,7 +313,8 @@ test.describe("PCでの詳細シート幅(サイドバーとの重なり対策�
 
     const pin = page.locator('[data-testid="map-pin"][data-shop-id="shop-test-published-01"]');
     await expect(pin).toBeVisible();
-    await pin.click();
+    // タスク6-1b(P-023再発・P-025)対応: e2e/support/pin-click.ts参照
+    await clickMapPinWithZoom(page, pin);
     await expect(page.getByTestId("detail-sheet-shop-name")).toBeVisible();
 
     const sheetBox = await page.getByTestId("detail-sheet").boundingBox();

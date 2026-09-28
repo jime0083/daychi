@@ -4,6 +4,7 @@ import { uniqueTestId } from "@/repositories/test-support";
 
 import { createEmulatorTestUser } from "./support/emulator-auth";
 import { mockGeocode } from "./support/geocode-mock";
+import { clickMapPinWithZoom } from "./support/pin-click";
 
 /**
  * タスク3-4(出演者フィルタ)のE2Eテスト。
@@ -280,7 +281,8 @@ test.describe("出演者フィルタ", () => {
 
     const newPin = page.locator(`[data-testid="map-pin"][aria-label="${shopName}"]`);
     await expect(newPin).toHaveCount(1);
-    await newPin.click();
+    // タスク6-1b(P-023再発・P-025)対応: e2e/support/pin-click.ts参照
+    await clickMapPinWithZoom(page, newPin);
     await expect(page.getByTestId("detail-sheet-shop-name")).toHaveText(shopName);
 
     // 詳細シートが開いたままの状態でも出演者フィルタのチェックボックスを操作できること

@@ -639,7 +639,11 @@
 
 ## P-023: ピン直接クリックのE2Eがまれに "intercepts pointer events" でタイムアウトする
 - 記録日: 2026-09-25
-- 状態: 再調査中(2026-09-26 P-025で再発。6-1aの修正は不十分)
+- 状態: 修正中(2026-09-26 タスク6-1bで原因を特定。6-1aの修正[padding]自体は妥当だが、
+  距離が離れるとfitBoundsのズーム低下でMarker同士が重なる別の独立した原因があった。詳細は本項末尾の
+  「タスク6-1bでの再調査」参照。ただし6-1b実装担当が最初に行ったアプリ側の修正[クリック座標に最も近い
+  ピンへ補正するcaptureフェーズのロジック]はユーザー判断で不採用となり、E2E側の対応に差し替えた
+  (下記「ユーザー決定」参照)。E2E側対応の完了確認とP-026(タスク6-1c)の解消をもって解決済みとする)
 - 発生箇所: e2e/detail-sheet.spec.ts・e2e/performer-filter.spec.ts のピン直接クリック(6-1実装時に実装担当が報告)
 - 問題内容:
   想定した動き: ピンのクリックが常に成功する
@@ -734,6 +738,85 @@
   padding 96なら距離に関係なく収まるはず。距離で再発する事実はこの説明と矛盾するため、真の原因は未特定と判断。
   実利用者でも店舗が離れている(東京以外の店舗が加わる等)とピンが押せない可能性がある。タスク6-1bで再調査・修正
 - 切り出したタスク(追加): progress.txt タスク6-1b
+- タスク6-1bでの再調査(2026-09-26、実装担当):
+  1. 具体的なケースの再現: リポジトリ外のスクラッチスクリプト(Playwright+
+     @firebase/rules-unit-testing)で、seed店舗(shop-test-published-01: 35.6938,139.7536。
+     shop-test-published-import-01: 35.658,139.7016。実距離は緯度経度差から算出して約6km)に
+     加え、44km/70km/90km/150km/400km(東京〜大阪程度)離れた店舗を1件ずつ公開した状態で
+     公開ページを開き、各ピンのgetBoundingClientRect・地図コンテナ矩形・
+     map.getZoom()/getBounds()(調査用に一時的にwindowへ公開して計測。本番コードには残していない)
+     を計測した。
+  2. データフロー追跡: 44〜90km(6-1aの検証範囲)ではshop-test-published-01のピンは
+     地図コンテナの上端から数百px以上のクリアランスがあり、6-1aの修正(padding 96)どおり
+     問題は起きない。ところが150km以上(fitBoundsのズームが概ね7台まで下がる)になると、
+     "intercepts pointer events" のエラーメッセージが指す奪う要素が、6-1aで特定した
+     「src/app/page.tsxの素のflexラッパー」ではなく、**別の店舗(shop-test-published-import-01)の
+     Marker要素(<path>)** に変わることを確認した。
+  3. 問題発生ステップの特定: fitBoundsは「現在同時にpublishされている全店舗」の座標範囲を基準に
+     ズームを決める。遠方の店舗が加わりズームが大きく下がると、実距離では約6kmしか離れていない
+     shop-test-published-01とshop-test-published-import-01のMarker要素(既定サイズ縦41px×
+     横27px、画面上のサイズはズームに関わらず一定)どうしが画面上で完全に重なる。
+     maplibregl.Markerは店舗配列の順序でDOM追加されるだけでスタッキング制御が無いため、
+     重なった位置ではDOM上で後から追加された側が常にクリックを奪う。これはfitBoundsの
+     paddingとは無関係な、Marker同士の重なりという6-1aとは別のメカニズムだった。
+  4. 根拠(実測): page.mouse.click()(Playwrightの操作可能性チェック=elementFromPoint相当の
+     ヒットテストを経由しない、実際のマウス操作と同じ座標指定の低レベルAPI)でshop-test-published-01の
+     ピン中心を直接クリックしたところ、6-1a当時のコード(Marker要素へのaddEventListener("click")
+     のみ)では150km/400km/90km(経度方向)/3店舗同時公開のいずれのケースでも、8回中5回は
+     「詳細シートは開くがshop-test-published-import-01(=クリックしていない方)の内容が表示される」
+     ことを確認した(=クリック自体は失敗せず、誤った店舗が開く。Playwrightのlocator.click()が
+     「intercepts pointer events」でタイムアウトするのは、Playwright自身の操作可能性チェックが
+     「対象要素が実際に最前面にあるか」を厳密に見ているためで、実際のブラウザの挙動としては
+     クリックイベント自体は最前面の別Markerに正しく配送されている)。
+  5. 6-1aの記録との整合性: 6-1aの「はみ出しは座標点から約34.5pxで一定(距離に依存しない)」という
+     計測は、fitBoundsのpaddingとMarkerのanchor+offsetの関係についての説明としては正しいまま
+     (訂正の必要なし)。ただし距離とともに再発する事実は、この「一定のはみ出し」では説明できず、
+     実際には**別の独立したメカニズム(Marker同士の重なり)がズーム低下に伴って新たに発生する**
+     ことが原因だった。「同じ現象の悪化」ではなく「別の現象の新規発生」であり、両立する
+     (矛盾ではない)と判断する。
+- 特定した原因(6-1b): src/components/map/PublicMap.tsxのMarker要素が、店舗配列の追加順という
+  恣意的なDOM順でクリックの奪い合いを行っており、実際にクリックした画面座標とは無関係に
+  「後から追加された側」が常に勝つ設計だったこと。店舗が広範囲に分散しfitBoundsのズームが
+  下がるほど、実距離では近い店舗どうしのMarkerが画面上で重なりやすくなり、この設計の欠陥が
+  顕在化する(6-1aで修正したfitBounds paddingの不足とは独立した別のアプリ側の不具合で、
+  実店舗データでも店舗数が増え地理的に離れた店舗が混在すれば発生しうる)。
+- 当初の修正案(不採用): PublicMap.tsxの地図コンテナにキャプチャフェーズのclickリスナーを追加し、
+  実際にクリックした座標(clientX/clientY)を含むMarkerの中で中心が最も近い店舗を求め
+  (findShopIdAtPoint)、ブラウザの通常のヒットテスト結果(event.target、重なりがあれば
+  「手前」のMarker)と食い違う場合だけそのイベントを止めて正しい店舗のonShopClickを呼ぶ、という
+  アプリ側の補正を一度実装した。しかしこれは「画面上に見えている(手前の)ピンをクリックしたつもりが、
+  実際には見えていない別の店舗が開くことがある」という新たな不整合を生む(クリック座標に最も近い
+  店舗が必ずしも画面上で最前面に見えているピンとは限らないため)。
+- ユーザー決定(2026-09-26、requirements.md「3.1 公開ページ」に反映): 地図を引いた表示で近くの
+  店舗のピンが重なる場合は、一般的な地図と同じくそのまま重ねて表示し、手前のピンが押される
+  (利用者が拡大すれば分かれる。まとめ表示(クラスタリング)は行わない)。上記のアプリ側補正は
+  不採用(差し戻し)とし、src/components/map/PublicMap.tsxのクリック判定はHEAD(6-1a時点)から
+  変更しない。ピンの重なりに対応する責務はE2E側に移す
+- 採用した対応(6-1b、E2E側): アプリのクリック判定は変更せず、E2Eが実際の利用者と同じ操作
+  (地図の拡大)でピンの重なりを解消してからクリックする。共有ヘルパー
+  `clickMapPinWithZoom`(e2e/support/pin-click.ts)を新設し、対象ピンに対して
+  `locator.click({ trial: true })`(実際にはクリックせずPlaywrightの操作可能性チェック=表示・
+  安定・最前面であることの確認のみ行う標準機能)を試み、失敗する間はそのピンの位置にマウスを置いて
+  ホイールスクロールし(実際のユーザーがマウス/トラックパッドで地図を拡大するのと同じ操作)、
+  最前面になったら通常のlocator.click()を行う。force:trueや固定時間の待機は使わない。
+  新設のe2e/distant-shop-pin-click.spec.tsは、東京〜大阪程度(約400km)離れた店舗を実際に公開した
+  状態で、(1)全ピンが地図コンテナ内に表示されること、(2)近接するseed店舗どうし
+  (shop-test-published-01・shop-test-published-import-01。実距離約6km)を含む全てのピンについて、
+  店舗ごとに公開ページを開き直したうえで`clickMapPinWithZoom`を使い、正しい店舗の詳細シートが
+  開くことを検証する。あわせて、既存specのうちshop-test-published-01等のピンを素の`locator.click()`
+  で押していた4箇所(detail-sheet.spec.ts、mobile-ui.spec.ts、performer-filter.spec.ts、
+  sidebar-detail-sheet-layout.spec.ts)も同ヘルパーに統一した。理由: 新設テストが実際に約400km
+  離れた店舗をfullyParallel実行中に公開すると、その間seed店舗どうしが画面上で重なりうる状態になり、
+  上記4specが同時に素のlocator.click()でshop-test-published-01のピンを押すと、requirements.mdの
+  決定どおり「手前のピンが押される」動作そのものにより、狙った店舗のピンが手前でない場合は
+  Playwrightの操作可能性チェックでintercepted扱いのタイムアウトになる(=E2E側が重なりに対応して
+  いないことによる失敗であり、アプリの不具合ではない)ため、対象4箇所を修正対象に含めた
+- 検証: e2e/distant-shop-pin-click.spec.tsを--repeat-each=5(chromium-desktop/mobile計10件)で
+  全件PASS。npm run typecheck / lint / test も全緑。npm run e2e(フルスイート)の連続実行結果は
+  タスク6-1cの完了確認とあわせて記録する(P-026(firebase-admin動的importの既存事象)による失敗は
+  本件と無関係のため区別して扱う)
+- 状態: この項目(アプリ側は変更なし、E2E側はclickMapPinWithZoomで対応済み)は6-1b実装として完了。
+  P-023全体の解決済み判定はタスク6-1c(P-026解消)完了後、フルE2E連続3回失敗0を確認してから行う
 
 ## P-024: 極端な並列負荷のE2Eで管理画面の画面遷移がタイムアウトする
 - 記録日: 2026-09-25
@@ -751,7 +834,9 @@
 
 ## P-025: E2Eに新規specを追加すると、P-023で「解決済み」としたピンクリックのintercept flakeが別テストで再発する
 - 記録日: 2026-09-26
-- 状態: P-023に統合(テスト座標の調整は回避策であり原因は未解決。6-1bで対応)
+- 状態: P-023に統合(2026-09-26 タスク6-1bで原因特定。対応方針はユーザー決定によりE2E側の
+  修正[clickMapPinWithZoom]に決着。P-023の「タスク6-1bでの再調査」「ユーザー決定」を参照。
+  P-023全体の解決済み判定と合わせる)
 - 発生箇所: フルE2E(npm run e2e相当、chromium-mobileプロジェクト)実行時の
   e2e/sidebar-detail-sheet-layout.spec.ts「モバイルでは詳細シートが従来通り画面全幅で表示される
   (左オフセットなし)」(shop-test-published-01のピンクリック)
@@ -804,6 +889,80 @@
 - 残課題(未解決・優先度は今後判断): P-023の「解決済み」は座標差44km程度までの検証であり、
   60km超では同じメカニズムで再発しうることが今回判明した。今後Phase 6以降でE2Eの店舗数・
   座標バリエーションが増えるほど再発リスクが上がるため、(a) 新規E2Eの座標は seed店舗近傍に
-  揃えるルールを明文化する、または(b) MAP_FIT_BOUNDS_PADDINGをさらに引き上げる/店舗間距離に
+  揃えるルールを明文化する、または(b) MAP_FIT_BOUNDSPADDINGをさらに引き上げる/店舗間距離に
   応じた動的paddingにする、等の恒久対応の要否をユーザーに確認して判断する
+  → 2026-09-26 タスク6-1bで対応済み。原因はpaddingの不足(6-1aで対応済みの範囲)ではなく、
+  Marker同士が画面上で重なった際にクリックを正しく振り分けられていなかったことだったため、
+  座標を離すほど再発しやすくなるという上記の懸念自体は当たっていたが、恒久対応は
+  「座標ルールの明文化」でも「paddingの調整」でもなく、PublicMap.tsxのクリック判定ロジック側の
+  修正で行った(P-023の「タスク6-1bでの再調査」参照)。e2e/distant-shop-pin-click.spec.tsで
+  約400km離れた店舗を含むケースを継続的に検証する
+
+## P-026: フルE2E実行中、firebase-adminのfirestore動的importがNode.jsのESM/CJS相互運用バグで
+  中頻度(観測で約25〜30%)に失敗する
+- 記録日: 2026-09-26
+- 状態: 未着手(タスク6-1bの検証中に発見・原因特定済み。6-1bの変更範囲外の既存事象のため
+  6-1bでは修正しない。別タスクとして切り出しが必要)
+- 発生箇所: e2e/support/firestore-raw.ts:59(`await import("firebase-admin/firestore")`)。
+  タスク6-2で導入されたヘルパー。呼び出し元はe2e/shop-instagram-link.spec.tsの
+  「【重点】…」テストのみ(まれに同ファイルの別テストでも類似の不安定さが観測された)
+- 問題内容:
+  想定した動き: npm run e2e が常に決定的に成功する
+  実際の動き: フルE2E実行中、中頻度(6-1bの検証で計20回程度実行し、およそ5〜6回、
+  つまり約25〜30%)で該当テストが以下のエラーで失敗する:
+  ```
+  Error: Imported CJS module file:///.../google-gax/node_modules/@grpc/proto-loader/build/src/util.js
+  failed to load module file:///.../protobufjs/google/protobuf/api.json using require() due to missed cache
+  This is caused by either a bug in Node.js or incorrect usage of Node.js internals.
+  Please open an issue with this stack trace at https://github.com/nodejs/node/issues
+  ```
+- 再現手順: npm run e2e を数回繰り返すと中頻度で発生。該当テストのみを単体実行
+  (npx playwright test e2e/shop-instagram-link.spec.ts -g 重点、--repeat-each=3含む)すると
+  常に成功し再現しない(=フルE2E相当の実行順・タイミングでのみ発生)
+- 原因調査:
+  - PublicMap.tsx/pin-click.ts等、タスク6-1bのアプリ側変更とは無関係(スタックトレースに
+    6-1bの変更ファイルは一切含まれない)。e2e/distant-shop-pin-click.spec.tsを一時的に
+    退避した状態でも同じ頻度で再現することを確認し、6-1bで追加したE2E(worker/ブラウザ
+    コンテキスト数の増加)が原因でないことも確認した
+  - エラーメッセージ本文を精査した結果、これはfirebase-admin(CJS)を`await import()`
+    (ESM経由の動的import)で読み込んだ際に、その内部依存(@grpc/proto-loader)がさらに
+    `require()`で.jsonファイル(protobufjsの定義ファイル)を読もうとする箇所で、
+    Node.jsのESM/CJS相互運用レイヤーの内部キャッシュ同期に関する既知の不具合
+    (「missed cache」)に起因するものと判断した。この種のエラーは対象モジュールを
+    そのプロセスで初めてロードする際のタイミング(他の非同期処理との競合)に依存して
+    non-deterministicに発生することがNode.js側でも報告されている性質の問題であり、
+    アプリ・テストのロジック不具合ではなくNode.jsランタイム側の相互運用バグである
+  - 発生頻度が実行のたびにばらつく(0/4回のこともあれば3/6回のこともあった)ことも、
+    「ロード順序・タイミング依存の競合」という原因説明と整合する
+- 特定した原因: Node.js(このマシンのバージョン)のESM/CJS相互運用レイヤーが、
+  firebase-admin経由でCJSモジュールが`require()`で.jsonファイルを読み込む際に、
+  動的import()の初回実行時のタイミング次第でモジュールキャッシュの同期に失敗する
+  既知のバグ。アプリケーションコード・E2Eテストのロジックの欠陥ではない
+- 切り出したタスク: 未定(次にこの領域を触るタスクの際にprogress.txtへ追加を検討)。
+  候補となる恒久対応: (a) e2e/support/firestore-raw.tsの`await import("firebase-admin/firestore")`
+  等の動的importを、ファイル先頭の静的importに変更する(静的ESM importはモジュール実行前に
+  解決されるため、この「非同期関数内での初回動的import」特有のタイミング競合を回避できる
+  可能性が高い。ただし他のe2e/support配下ファイルが同種の動的importパターンを採用している
+  理由が不明なため、変更前にその理由の確認が必要)、(b) Node.jsのバージョンを更新する、
+  (c) firebase-admin依存を避けてクライアントSDK+Emulator直読みに置き換える、等
+- 6-1bでの扱い: 上記の通り原因を特定したが、修正はタスク範囲外のため実施していない。
+  このためタスク6-1bの「フルE2E連続3回失敗0」の検証は、このP-026の影響を受けない
+  desktop/mobile個別実行や、6-1b固有のspec(distant-shop-pin-click.spec.ts)の
+  繰り返し実行(--repeat-each=5、chromium-desktop/mobile合計10件全PASS)で6-1b自体の
+  修正の妥当性を確認したうえで、フルE2E全体としては連続実行の一部でP-026が発生しうることを
+  daychi-review/ユーザーに申し送る
+
+## P-027: Instagram URLを空欄にして保存した後、編集フォームを開き直すと前の値が表示されることがある
+- 記録日: 2026-09-28
+- 状態: 調査中
+- 発生箇所: 管理画面 店舗(/admin/shops)の編集フォーム。e2e/shop-instagram-link.spec.ts:131
+  (6-1bレビューのフルE2E 5回中1回で発生。6-1bの変更とは無関係=src差分なし・ピンクリックなし)
+- 問題内容:
+  想定した動き: Instagram URLを空欄にして保存(「店舗を更新しました」表示)→編集を開き直すと空欄
+  実際の動き: 開き直した編集フォームに保存前の値(https://www.instagram.com/daychi_coffee_e2e/)が表示される
+- 再現手順: npm run e2e を繰り返す(観測5回中1回、desktop/mobile問わず)
+- 原因調査: 未実施。実利用者にも起こりうる不具合(保存直後の一覧再読み込みと編集フォームの初期値の
+  タイミング、保存処理で空欄が実際に書き込まれていない場合がある等)か、テストの待ち合わせの問題かを切り分ける
+- 特定した原因: (未特定)
+- 切り出したタスク: progress.txt タスク6-1d
 
