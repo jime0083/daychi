@@ -96,6 +96,19 @@ test.describe("訪問登録CRUD(/admin/visits)", () => {
     await page.getByRole("button", { name: "保存" }).click();
 
     const updatedRow = page.getByTestId("visit-row").filter({ hasText: testId });
+
+    // 保存直後に編集を開き直すと、保存後の値が表示される(P-027回帰防止)。
+    // ここではまだ一覧の再取得(reload)完了を待つ他のアサーション
+    // (更新後の品目が一覧に表示される、等)を挟まずに直接「編集」を押すことで、
+    // reload完了前に押した場合と同じ経路を通す(updatedRowはtestId(編集で
+    // 変わらない値)でフィルタしているためreload完了を待たずに操作できる)
+    await updatedRow.getByRole("button", { name: "編集" }).click();
+    const reopenedEditRow0 = page.getByTestId("visit-edit-consumption-row").nth(0);
+    await expect(reopenedEditRow0.getByTestId("visit-edit-consumption-item").nth(0)).toHaveValue(
+      updatedItemMain1,
+    );
+    await page.getByRole("button", { name: "キャンセル" }).click();
+
     await expect(updatedRow).toBeVisible();
     await expect(page.getByTestId("visit-success")).toContainText("訪問を更新しました");
     await expect(updatedRow).toContainText(updatedItemMain1);

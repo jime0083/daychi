@@ -99,6 +99,15 @@ test.describe("動画登録CRUD(/admin/videos)", () => {
     await page.getByTestId("video-edit-title").fill(updatedTitle);
     await page.getByRole("button", { name: "保存" }).click();
 
+    // 保存直後に編集を開き直すと、保存後の値が表示される(P-027回帰防止)。
+    // ここではまだ一覧の再取得(reload)完了を待つ他のアサーション
+    // (更新後のタイトルが一覧に表示される、等)を挟まずに直接「編集」を押すことで、
+    // reload完了前に押した場合と同じ経路を通す(rowは元のタイトルでフィルタしており、
+    // updatedTitleの部分文字列として一致し続けるためreload完了を待たずに操作できる)
+    await row.getByRole("button", { name: "編集" }).click();
+    await expect(page.getByTestId("video-edit-title")).toHaveValue(updatedTitle);
+    await page.getByRole("button", { name: "キャンセル" }).click();
+
     const updatedRow = page.getByTestId("video-row").filter({ hasText: updatedTitle });
     await expect(updatedRow).toBeVisible();
     await expect(page.getByTestId("video-success")).toContainText("動画を更新しました");

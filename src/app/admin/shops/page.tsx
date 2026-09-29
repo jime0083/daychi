@@ -405,11 +405,16 @@ export default function AdminShopsPage() {
     }
     try {
       await updateShop(id, { ...result.data, tagIds: editForm.tagIds });
+      // P-027対応: 一覧の再取得(reload)が終わるまでeditingIdを残す。
+      // 先にeditingIdをnullにすると「編集」ボタンが再度押せる状態になり、
+      // reload完了前にstartEditが呼ばれるとshops(まだ更新前のデータ)から
+      // editFormを初期化してしまい、保存したはずの値が編集フォームに
+      // 反映されない(前の値が表示される)レースコンディションが起きる。
+      await reload();
       setEditingId(null);
       setEditErrors([]);
       setEditGeocodeError(null);
       showSuccess("店舗を更新しました");
-      await reload();
     } catch (error) {
       setEditErrors([`更新に失敗しました: ${errorMessage(error)}`]);
     }

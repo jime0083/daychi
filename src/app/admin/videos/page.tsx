@@ -269,10 +269,16 @@ export default function AdminVideosPage() {
     }
     try {
       await updateVideo(id, result.data);
+      // P-027対応(/admin/shopsと同じレースコンディションの解消): 一覧の再取得
+      // (reload)が終わるまでeditingIdを残す。先にeditingIdをnullにすると
+      // 「編集」ボタンが再度押せる状態になり、reload完了前にstartEditが
+      // 呼ばれるとvideos(まだ更新前のデータ)からeditFormを初期化して
+      // しまい、保存したはずの値が編集フォームに反映されない
+      // (前の値が表示される)レースコンディションが起きる。
+      await reload();
       setEditingId(null);
       setEditErrors([]);
       showSuccess("動画を更新しました");
-      await reload();
     } catch (error) {
       setEditErrors([`更新に失敗しました: ${errorMessage(error)}`]);
     }
