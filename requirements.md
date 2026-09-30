@@ -79,8 +79,9 @@ YouTubeチャンネル「Daychi〜COFFEE CHANNEL」で紹介されたコーヒ�
     画面をタップ/クリックすれば即座にホーム画面へ進む
   - 背景 #DADADA、文字の縁取り #FFCC3A、文字本体 #007D00。文字が描かれるアニメーション(縁取りの線が描かれた後に文字が塗られる)
   - 書体: 「DayChi」= Oleo Script(Bold)、「COFFEE MAP」= Vollkorn(Black、字間 −0.01em)。いずれもGoogle Fonts(OFL)
-  - 2段組み(上段 DayChi、下段 COFFEE MAP)。大きさは見本「ファーストビューに近い大きさ」に合わせる
-    (DayChi: clamp(3.6rem, 15vw, 7rem)、COFFEE MAP: clamp(1.7rem, 6.8vw, 3.2rem))
+  - 配置は参考ロゴと同じ: 「DayChi」を大きく表示し、その下の y の尾の左側に「COFFEE」、右側に「MAP」を分けて置く
+    (COFFEE MAP は DayChi の約0.34倍の大きさ。y の尾と文字が重ならない)(2026-09-30決定)
+  - 同じロゴをPCのサイドバー上部・スマホのヘッダーにも小さく表示する
 
 ### 3.2 管理画面(/admin)
 - 管理画面はPC専用とする(スマホ幅への対応は行わない。E2Eの管理画面操作もPC幅で行う)(2026-09-30決定)
