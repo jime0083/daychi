@@ -184,6 +184,9 @@ export default function Home() {
   const [selectedPerformerIds, setSelectedPerformerIds] = useState<string[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>("map");
+  // 出演者/タグ絞り込み帯(PerformerFilter+TagFilter)の実測高さ(px)。
+  // タスク6-3a(P-029)対応: 下記のfilterBarRef用useEffect参照
+  const [filterBarHeightPx, setFilterBarHeightPx] = useState(0);
 
   // アンマウント後の setState を防ぐガード(/admin配下の各画面と同じパターン)
   const mountedRef = useRef(true);
@@ -191,6 +194,44 @@ export default function Home() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+    };
+  }, []);
+
+  // 出演者/タグ絞り込み帯(PerformerFilter+TagFilter)の実測高さを追跡する
+  // (タスク6-3a・P-029対応)。
+  //
+  // 背景・原因(P-029): PerformerFilter/TagFilterは地図の「上」に通常のドキュメントフローで
+  // 配置され、選択肢(出演者・タグ)の件数に応じて高さが伸びる(上限なし)。一方DetailSheetは
+  // 画面下端に固定表示され、内容量に応じて最大80vh(max-h-[80vh])まで伸びる。両者の高さの
+  // 合計が画面高さを超えると、より高いz-index(z-[60])を持つ絞り込み帯がDetailSheetの
+  // 上部(閉じるボタン等)を画面座標上で覆ってしまい、絞り込み帯のクリックを奪う
+  // (pointer-events-autoなul要素がDetailSheetより手前になるため)。実際に出演者・タグが
+  // 出演者10件・タグ10件程度に増えたモバイル幅では、絞り込み帯の高さだけで画面の3〜4割を
+  // 占めうることを実測で確認した。
+  //
+  // 修正方針: 絞り込み帯自体の見た目(全項目をラップ表示する現行デザイン)は変更しない
+  // (これはrequirements.mdで決まっていない新規UI変更に該当するため導入しない)。代わりに、
+  // DetailSheet.tsxの既存の対処パターン(PCでVideoSidebarの幅だけmd:left-72で避ける)と
+  // 同じ考え方で、DetailSheetの最大高さを「絞り込み帯の実測高さを差し引いた残り画面高さ」で
+  // 追加的に制限する(min(80vh, 100dvh - 絞り込み帯高さ))。これにより絞り込み帯がどれだけ
+  // 伸びてもDetailSheetの上端が絞り込み帯の下端より上に来ることがなくなり、両者は画面座標上で
+  // 重ならなくなる(絞り込み帯は常に全項目がクリックでき、DetailSheetは必要なら内部スクロール
+  // (既存のoverflow-y-auto)で対応する)。
+  const filterBarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = filterBarRef.current;
+    if (element === null) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry !== undefined) {
+        setFilterBarHeightPx(entry.contentRect.height);
+      }
+    });
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
     };
   }, []);
 
@@ -308,12 +349,21 @@ export default function Home() {
         onVideoClick={handleVideoClick}
       />
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        <PerformerFilter
-          performers={performers}
-          selectedPerformerIds={selectedPerformerIds}
-          onTogglePerformer={togglePerformerId}
-        />
-        <TagFilter tags={tags} selectedTagIds={selectedTagIds} onToggleTag={toggleTagId} />
+        {/* max-h-[30dvh] overflow-y-auto: タスク6-3a(P-029)対応。出演者/タグの選択肢が
+            多い場合(実測: 各10件程度でモバイル幅の高さの大半)でも、この帯自体の高さを
+            画面高さの30%までに抑えて地図の表示領域(下のrelative divのflex-1)を必ず
+            確保する。選択肢が多い分はこの帯の中で内部スクロールして選ぶ(既存の
+            DetailSheet.tsxのmax-h-[80vh]+overflow-y-autoと同じ「伸びうる内容は上限+内部
+            スクロールで扱う」方針を踏襲)。実測高さはfilterBarRef(下記useEffect参照)で
+            DetailSheetの最大高さ計算にも使われる */}
+        <div ref={filterBarRef} className="max-h-[30dvh] overflow-y-auto">
+          <PerformerFilter
+            performers={performers}
+            selectedPerformerIds={selectedPerformerIds}
+            onTogglePerformer={togglePerformerId}
+          />
+          <TagFilter tags={tags} selectedTagIds={selectedTagIds} onToggleTag={toggleTagId} />
+        </div>
         <div className="relative min-h-0 flex-1">
           {/* 地図ビュー: モバイルでは「地図」タブ選択時のみ表示(CSSのhiddenで切り替え、
               PublicMap自体はアンマウントしない。タスク3-5コメント参照)。デスクトップでは常に表示 */}
@@ -351,6 +401,7 @@ export default function Home() {
         visitDetails={selectedShopVisitDetails}
         performers={performers}
         tags={tags}
+        filterBarHeightPx={filterBarHeightPx}
         onClose={closeDetailSheet}
       />
     </main>

@@ -68,6 +68,7 @@ YouTubeチャンネル「Daychi〜COFFEE CHANNEL」で紹介されたコーヒ�
 **サムネイル取得:** YouTube動画IDから `https://i.ytimg.com/vi/{videoId}/hqdefault.jpg` を利用(APIキー不要)
 
 ### 3.2 管理画面(/admin)
+- 管理画面はPC専用とする(スマホ幅への対応は行わない。E2Eの管理画面操作もPC幅で行う)(2026-09-30決定)
 
 - Firebase Auth(Googleログイン)。管理者クレーム(admin == true)を持つアカウントのみアクセス可。それ以外はログイン後もアクセス拒否(セキュリティルールと同一基準。「4. データモデル」の管理者判定を参照)
 - 機能:

@@ -64,6 +64,17 @@
  *   「Googleマップでご確認ください」と表示する(src/lib/shop-detail.tsの
  *   formatBusinessHours)。Googleの店舗情報を保存することはGoogle Maps Platform
  *   規約で禁止のため、最新の営業時間は「Googleマップで開く」経由で確認してもらう方針。
+ *
+ * タスク6-3a対応(P-029): 出演者/タグ絞り込み帯(PerformerFilter+TagFilter)は、
+ * 選択肢(出演者・タグ)の件数に応じて高さの上限なく伸びる。一方このシートは画面下端に
+ * 固定表示され、内容量に応じて最大80vhまで伸びる。両者の高さの合計が画面高さを超えると、
+ * より高いz-index(z-[60])を持つ絞り込み帯がこのシートの上部(閉じるボタン等)を画面座標上
+ * で覆い、クリックを奪ってしまう不具合があった(実測: 出演者・タグ各10件程度でモバイル幅の
+ * 3〜4割の高さになり再現)。呼び出し側(src/app/page.tsx)が絞り込み帯の実測高さを
+ * filterBarHeightPxとして渡し、下記styleでこのシートの最大高さを
+ * 「min(80vh, 画面高さ - 絞り込み帯高さ)」に追加制限することで、絞り込み帯がどれだけ
+ * 伸びてもこのシートの上端が絞り込み帯の下端より上に来ないようにする(内容が収まらない分は
+ * 既存のoverflow-y-autoで内部スクロールする)。
  */
 import { CameraIcon } from "@/components/icons/CameraIcon";
 import type { Performer } from "@/types/performer";
@@ -84,6 +95,14 @@ interface DetailSheetProps {
   performers: Performer[];
   /** shop.tagIds→タグ名の解決に使うタグ一覧(全件) */
   tags: Tag[];
+  /**
+   * 出演者/タグ絞り込み帯(PerformerFilter+TagFilter)の実測高さ(px、0以上)。
+   * タスク6-3a(P-029)対応: このシートの最大高さを絞り込み帯の高さ分だけ追加で
+   * 制限し(下記style参照)、絞り込み帯の選択肢が多く伸びた場合でもシートの上端
+   * (閉じるボタン等)が絞り込み帯と画面座標上で重ならないようにする。
+   * 呼び出し側(src/app/page.tsx)がResizeObserverで実測して渡す
+   */
+  filterBarHeightPx: number;
   onClose: () => void;
 }
 
@@ -92,7 +111,14 @@ function resolvePerformerName(performers: Performer[], performerId: string): str
   return performers.find((performer) => performer.id === performerId)?.name ?? "(不明な出演者)";
 }
 
-export function DetailSheet({ shop, visitDetails, performers, tags, onClose }: DetailSheetProps) {
+export function DetailSheet({
+  shop,
+  visitDetails,
+  performers,
+  tags,
+  filterBarHeightPx,
+  onClose,
+}: DetailSheetProps) {
   const isOpen = shop !== null;
   const shopTags = shop === null ? [] : resolveShopTags(shop, tags);
   const instagramUrl = shop?.instagramUrl?.trim() ?? "";
@@ -115,8 +141,15 @@ export function DetailSheet({ shop, visitDetails, performers, tags, onClose }: D
       <div
         data-testid="detail-sheet"
         aria-hidden={!isOpen}
-        // md:left-72: オーバーレイと同じ理由(上のコメント参照)
-        className={`fixed inset-x-0 bottom-0 z-50 max-h-[80vh] overflow-y-auto rounded-t-2xl bg-white shadow-lg transition-transform duration-300 ease-out md:left-72 dark:bg-zinc-950 ${
+        // md:left-72: オーバーレイと同じ理由(上のコメント参照)。
+        // style.maxHeight: タスク6-3a(P-029)対応。従来のTailwindクラス(max-h-[80vh])を
+        // インラインstyleに置き換え、80vhという上限(通常時の挙動は変えない)を維持しつつ、
+        // 絞り込み帯の実測高さ(filterBarHeightPx)を画面高さから差し引いた残り分でも
+        // 追加的に制限する(min()で両者のうち小さい方を採用)。絞り込み帯が伸びた場合は
+        // こちらが効いてシートが短くなり、絞り込み帯と重ならなくなる
+        // (DetailSheetPropsのコメント参照)
+        style={{ maxHeight: `min(80vh, calc(100dvh - ${filterBarHeightPx}px))` }}
+        className={`fixed inset-x-0 bottom-0 z-50 overflow-y-auto rounded-t-2xl bg-white shadow-lg transition-transform duration-300 ease-out md:left-72 dark:bg-zinc-950 ${
           isOpen ? "translate-y-0" : "pointer-events-none translate-y-full"
         }`}
       >

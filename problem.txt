@@ -1040,17 +1040,125 @@
 
 ## P-029: モバイルで出演者/タグの絞り込み欄が他の要素のクリックを奪う
 - 記録日: 2026-09-30
-- 状態: 調査中
-- 発生箇所: e2e/admin-import-review.spec.ts:54(chromium-mobile)。6-3レビューのフルE2E 3回すべてで1件失敗
+- 状態: 解決済み
+- 発生箇所: 公開ページ(/)。e2e/admin-import-review.spec.ts:54(chromium-mobile)実行中、公開ページの
+  detail-sheet-close クリックで顕在化(6-3レビューのフルE2E 3回すべてで1件失敗)
 - 問題内容:
   想定した動き: 詳細シートの閉じるボタン等が押せる
   実際の動き: クリックが絞り込み欄の <ul class="flex flex-wrap gap-x-3 gap-y-1 pointer-events-auto"> に奪われ
               30秒でタイムアウト(detail-sheet-close 等。6-1d時点のコードでも同条件で4/5再現=6-3の変更が原因ではない)
 - 再現手順: npx playwright test e2e/admin-import-review.spec.ts --repeat-each=5 --project=chromium-mobile
-- 原因調査(途中): PerformerFilter/TagFilter は z-[60]、DetailSheet は z-50。モバイルで絞り込み欄の選択肢が
-  増えて高さが伸びると、詳細シート上部(閉じるボタン等)に重なる可能性(未検証)。このテストは実行中に
-  出演者を新規登録するため選択肢が増える。レビューでは review-unresolved-register(管理画面)で失敗した回もあり、
-  その経路は未解明。実利用者でも、メイン以外の出演者やタグが増えるとスマホで詳細シートを閉じられない可能性がある
-- 特定した原因: (未特定)
+- 原因調査:
+  - PerformerFilter/TagFilter(src/components/map/PerformerFilter.tsx・TagFilter.tsx)は地図の「上」に
+    通常のドキュメントフローで配置され、選択肢(出演者・タグ)の件数に応じて高さの上限なく伸びる
+    (flex-wrapで折り返すのみで、絞り込み帯自体にmax-height/overflowの指定がない)
+  - DetailSheet(src/components/map/DetailSheet.tsx)は画面下端にposition:fixedで固定され、
+    内容量に応じて最大80vh(旧: Tailwindのmax-h-[80vh]クラス)まで伸びる
+  - PerformerFilter/TagFilterのulはz-[60]・pointer-events-auto、DetailSheetはz-50。両者の高さの合計が
+    画面高さを超えると(絞り込み帯の下端 > シートの上端)、より高いz-indexを持つ絞り込み帯のulが
+    画面座標上でシート上部(店名・閉じるボタン等)を覆い、そこへのクリックを奪う
+  - 実測(e2e/admin-import-review.spec.tsを一時的に計装し、失敗時のスクリーンショット・
+    document.elementFromPoint()・getBoundingClientRectで確認): 出演者フィルタに2件
+    (うち1件はテスト内で新規登録した長い名前)・タグフィルタに2件が並んだだけの状態でも、
+    絞り込み帯がモバイル幅(iPhone13エミュレーション、390×844)の3〜4割の高さになり、
+    detail-sheet-closeボタンの座標がPerformerFilter/TagFilterのul(class="flex flex-wrap
+    gap-x-3 gap-y-1 pointer-events-auto")の描画範囲と一致することを確認した
+    (elementFromPointが実際にそのulのlabelを返す)。出演者・タグが各10件程度に増えるほど
+    この重なりは大きくなり、実際のチャンネル運営でメイン以外の出演者・タグが増えていくと、
+    スマホ利用者が詳細シートを閉じられなくなる実害がある(テスト専用の長い名前が原因ではない)
+  - 別経路(review-unresolved-registerクリックの失敗)については、/admin/review配下は
+    PerformerFilter/TagFilterを一切描画しないため本問題とは別原因と判明(詳細はP-030)
+- 特定した原因:
+  出演者/タグ絞り込み帯(PerformerFilter+TagFilter)の高さに上限が無く、詳細シートの最大高さ
+  (80vh固定)との組み合わせ次第で、より高いz-indexを持つ絞り込み帯が詳細シートの一部を
+  画面座標上で覆ってしまう設計上の不備
 - 切り出したタスク: progress.txt タスク6-3a
+- 解決日: 2026-09-30
+- 解決内容:
+  見た目の方針(絞り込み帯を折りたたむ等のUI変更)は requirements.md で決まっていないため導入せず、
+  既存のDetailSheet.tsx自身が使っている「内容が伸びうる箇所は上限+内部スクロールで扱う」という
+  確立済みパターンを絞り込み帯にも適用する形で対応した(新規UI方針の追加ではなく既存パターンの踏襲):
+  (1) src/app/page.tsx: PerformerFilter+TagFilterを囲む共通ラッパーに `max-h-[30dvh]
+      overflow-y-auto` を追加(選択肢が多い分はこの帯の中で内部スクロールする。地図表示領域
+      (flex-1)が絞り込み帯にどれだけ選択肢が増えても必ず確保されるようにする狙いもある)
+  (2) src/app/page.tsx: 上記ラッパーの実測高さをResizeObserverで追跡し(filterBarHeightPx)、
+      DetailSheetに新規propとして渡す
+  (3) src/components/map/DetailSheet.tsx: シート本体のmax-heightを、Tailwindの固定クラス
+      (max-h-[80vh])からインラインstyle `min(80vh, calc(100dvh - ${filterBarHeightPx}px))`
+      に変更。これにより絞り込み帯がどれだけ伸びてもシートの上端が絞り込み帯の下端より
+      上に来ることがなくなり、画面座標上で重ならなくなる(通常時=絞り込み帯が短い間は
+      従来通り実質80vhのまま動作は変わらない)
+  検証: e2e/mobile-filter-overlap.spec.ts(新規)で、出演者10件・タグ10件をFirestore
+  Emulatorへ直接書き込み(e2e/support/raw-write.ts、管理画面CRUD UIはモバイル幅での安定性の
+  都合上使わない)して絞り込み帯を実際に伸ばした状態で、詳細シートの開閉(通常click)・
+  シート内リンク(Googleマップで開くリンクの通常clickでpopupが開く)・絞り込みチェックボックス
+  操作(通常click)がすべて成功することを確認(chromium-mobile --repeat-each=3 で3/3成功)。
+  既存のe2e/detail-sheet.spec.ts・performer-filter.spec.ts・tag-filter.spec.ts・
+  sidebar.spec.ts・mobile-ui.spec.tsにリグレッションが無いことを確認済み。
+  npm run typecheck / lint / test は全緑。npm run e2e(フルスイート)は本問題(P-029)由来の
+  失敗は再発せず、P-030(別問題・管理画面/adminのモバイル未対応起因)による1件のみ残存する
+  (詳細はP-030参照。フルE2E連続3回失敗0の完了条件はP-030解消後に満たす)
+
+## P-030: /admin/review(レビュー画面)がモバイル幅で横方向にオーバーフローし、Playwrightのクリックが
+  意図しない要素に奪われることがある
+- 記録日: 2026-09-30
+- 状態: 調査中(6-3a範囲外につき修正未着手。原因の当たりまで調査済み)
+- 発生箇所: /admin/review/[videoId](ReviewShopCard・ReviewVisitCard)。
+  e2e/admin-import-review.spec.ts:54 の "review-unresolved-register" クリック(chromium-mobile)
+- 問題内容:
+  想定した動き: レビュー画面の「新規出演者として登録」ボタン等が通常clickで押せる
+  実際の動き: クリックが同じ訪問カード内の別要素(「出演者を追加」ボタン・自分の行のspanテキスト)や、
+              画面共通の <main>・<nav aria-label="管理メニュー"> に奪われ、30秒(または任意timeout)で
+              タイムアウトする。npx playwright test e2e/admin-import-review.spec.ts --repeat-each=5
+              --project=chromium-mobile で4〜5/5再現
+- 原因調査:
+  - P-029の絞り込み帯(PerformerFilter/TagFilter)が原因かどうかを確認するため、それらのclassName
+    (`flex-wrap gap-x-3 gap-y-1`)をsrc/全体でgrepしたところ、公開ページ(/)のPerformerFilter.tsx・
+    TagFilter.tsxにのみ存在し、/admin配下では一切描画されないことを確認した。よってこの失敗は
+    P-029(絞り込み帯)とは別原因である(6-3aで確認を求められた「本当に管理画面で同じ要素に
+    奪われたのか」への回答: 否。管理画面には絞り込み帯自体が存在しない)
+  - e2e/admin-import-review.spec.tsを一時的に計装し(document.elementFromPoint()の周期サンプリング、
+    getBoundingClientRectのダンプ、window.scrollY追跡。検証用の一時変更は検証後にgit checkoutで
+    完全に元に戻し、コミットしていない)、失敗の瞬間の状態を調べた:
+    - 自前でscrollIntoViewIfNeeded()した直後に測定した「新規出演者として登録」ボタン・
+      「出演者を追加」ボタン・未割り当て行(review-unresolved-row)のgetBoundingClientRectは
+      互いに重なっておらず(例: addRowBtn top:326-360、unresolvedRow top:525-855、
+      registerBtn top:796-846)、position:staticの通常フローとして正しい非重複ジオメトリだった
+    - 同時に取得した window.innerWidth が 509、document.documentElement.clientWidth /
+      window.visualViewport.width が 390、document.documentElement.scrollWidth /
+      document.body.scrollWidth が 509 前後であることを確認した(viewportメタタグは
+      "width=device-width, initial-scale=1"で正常)。すなわちページの実コンテンツが
+      390pxの表示幅に対して約120px分横方向にオーバーフローしている
+    - オーバーフローの原因として src/components/admin/review/ReviewShopCard.tsx の
+      フォームラベル(`<label className="flex min-w-64 flex-1 flex-col ...">` 等、複数箇所)が
+      256px(min-w-64)の最小幅を持つことを確認した。一方 /admin 共通レイアウト
+      (src/components/admin/AdminShell.tsx)の左ナビ(`<nav className="w-48 ...">`)は
+      192pxの固定幅で、iPhone13相当(390px)の狭い画面でもナビ幅を縮めない
+      (レスポンシブ対応が入っていない)。390 - 192(nav) - 48(mainのp-6左右) ≒ 150px しか
+      main の実効幅が残らず、256pxのmin-w-64ラベルが確実にそれを超えてオーバーフローする
+    - 自前のJS計測(elementFromPoint)では対象ボタン自身が常にヒットする(重なりなし)にも
+      関わらず、Playwright自身の.click()内部の実際のヒットテストでは上記の無関係な要素が
+      intercepts pointer eventsとして報告される、という食い違いを複数回確認した。この食い違いは
+      --workers=1で他のE2E(並行実行)の影響を排除した単独実行でも5/6回再現し、「他のテストが
+      出演者を同時に作成してPerformerFilterの選択肢が増えるため」という説(P-029と同じ原因)では
+      説明できないことを確認した(/adminにはそもそも絞り込み帯が無いため無関係)
+  - 上記より、横方向オーバーフローが存在する状態で、Chromiumのモバイルエミュレーション
+    (isMobile/deviceScaleFactor 3)下でのPlaywrightのクリック座標計算(CDP経由)と、
+    ページ自身のCSSレイアウト座標(getBoundingClientRect/elementFromPoint)との間に
+    食い違いが生じている可能性が高いと考えられる(window.innerWidthとdocumentElement.
+    clientWidthの不一致もこの食い違いの症状の一つ)。ただし、この食い違いの内部メカニズム
+    そのもの(Chromium/Playwright側の挙動)までは特定できていない
+- 特定した原因(推定・未確定):
+  /admin/review画面がモバイル幅を想定していない(左ナビが固定192px幅、ReviewShopCardの
+  フォームラベルが固定256px最小幅)ため、iPhone13相当の390px幅で実際に横方向オーバーフローが
+  発生しており、この状態がChromiumモバイルエミュレーションでのPlaywrightクリック座標計算を
+  不安定にしていると考えられる。P-029(絞り込み帯)とは無関係の別問題
+- 切り出したタスク: (未定。requirements.mdは管理画面のモバイル対応を要求しておらず、
+  「管理者(開発者本人)」による利用を想定しているため、対応要否・対応方針
+  (例: ReviewShopCardのmin-w-64を撤去し狭幅で折り返す/管理画面はデスクトップ専用と割り切り
+  該当specをモバイルプロジェクトの対象から外す、等)はユーザー判断が必要。6-3aの担当範囲外
+  のため6-3a側では修正しない。npm run e2e のフルスイートに limitationとして1件残る)
+- ユーザー決定(2026-09-30): 管理画面はPC専用(requirements.md 3.2)。管理画面のモバイル対応は行わず、
+  管理画面を操作するE2EはPC幅で行う。公開ページのスマホ確認は従来どおり続ける
+- 切り出したタスク(追加): progress.txt タスク6-3b
 
