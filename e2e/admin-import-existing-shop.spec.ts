@@ -32,8 +32,14 @@ import { createEmulatorTestUser } from "./support/emulator-auth";
  * UI経由ではなく@firebase/rules-unit-testing(scripts/seed.ts・
  * e2e/tags-crud.spec.tsと同じ方式)でtry/finally内から直接Firestoreを操作する
  * (UI操作に依存すると、テスト本文の途中で失敗した場合に後片付けへ到達できないため)。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * このファイルの全テストはPC幅(chromium-desktop)のみで実施する。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 // scripts/seed.ts の SEED_PROJECT_ID / playwright.config.ts の E2E_EMULATOR_PROJECT_ID と
 // 一致させる(同じFirestore Emulator名前空間に接続するため)
@@ -204,7 +210,11 @@ async function cleanupCreatedVisitAndVideo(videoId: string): Promise<void> {
 }
 
 test.describe("AI取り込み: 既存published店舗を再利用する訪問(タスク4-4 観点4)", () => {
-  test("既存店舗を再利用して承認しても、その店舗のフィールドは変更されない", async ({ page }) => {
+  test("既存店舗を再利用して承認しても、その店舗のフィールドは変更されない", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     const testId = uniqueTestId("e2e-import-existing");
     const videoId = uniqueVideoId();
     const videoTitle = `【E2Eテスト】既存店舗再利用動画 ${testId}`;

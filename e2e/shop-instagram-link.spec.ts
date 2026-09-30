@@ -5,6 +5,7 @@ import { uniqueTestId } from "@/repositories/test-support";
 import { createEmulatorTestUser } from "./support/emulator-auth";
 import { getShopRawFieldsByName } from "./support/firestore-raw";
 import { mockGeocode } from "./support/geocode-mock";
+import { useAdminViewport, usePublicViewport } from "./support/viewport";
 
 /**
  * タスク6-2(店舗のInstagramリンク、P-020)のE2Eテスト。
@@ -25,10 +26,20 @@ import { mockGeocode } from "./support/geocode-mock";
  * 座標はseed店舗・他タスクのE2Eと重ならない決定的な値を使う(problem.txt P-009対応の方針)。
  *
  * テスト用データはこのファイル自身が作成・削除する(共有seedの値は書き換えない。P-018)。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * 管理画面の操作のみで完結するテスト(店舗管理画面・ReviewShopCardでの登録)はPC幅
+ * (chromium-desktop)のみで実施する。管理画面での登録に続けて公開ページのモバイル表示を
+ * 検証するテストは、e2e/support/viewport.ts で管理画面操作の間だけPC幅に切り替え、
+ * 公開ページの検証区間は本来のモバイル幅に戻すことで、モバイル幅での公開ページ検証を
+ * 引き続き行う(検証内容は弱めない)。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
 const VALID_INSTAGRAM_URL = "https://www.instagram.com/daychi_coffee_e2e/";
 const INVALID_INSTAGRAM_URL = "https://example.com/daychi_coffee_e2e/";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のみのE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 async function blockMapTiles(page: Page): Promise<void> {
   await page.route("**/tiles.openfreemap.org/**", async (route) => {
@@ -71,7 +82,9 @@ async function deleteShopByName(page: Page, name: string): Promise<void> {
 test.describe("店舗のInstagramリンク(タスク6-2・P-020)", () => {
   test("店舗管理画面でInstagram URLを登録・保存・再表示で保持でき、不正なURLはエラーになる", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await blockMapTiles(page);
     await loginAsAdmin(page, "e2e-shop-ig-admin");
 
@@ -137,7 +150,9 @@ test.describe("店舗のInstagramリンク(タスク6-2・P-020)", () => {
 
   test("AI取り込みレビュー画面(ReviewShopCard)でInstagram URLを登録・保存・再表示で保持でき、不正なURLはエラーになる", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await blockMapTiles(page);
 
     const testId = uniqueTestId("e2e-review-ig");
@@ -269,8 +284,9 @@ test.describe("店舗のInstagramリンク(タスク6-2・P-020)", () => {
 
   test("【重点】登録済みのInstagram URLを編集で空欄にして保存すると、Firestore上のフィールドも実際に消え、詳細シートのアイコンも消える", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await blockMapTiles(page);
+    await useAdminViewport(page, testInfo);
     await loginAsAdmin(page, "e2e-clear-ig-admin");
 
     const testId = uniqueTestId("e2e-clear-ig");
@@ -313,6 +329,7 @@ test.describe("店舗のInstagramリンク(タスク6-2・P-020)", () => {
 
       // 3. 公開ページの詳細シートにアイコンが表示される
       await blockMapTiles(page);
+      await usePublicViewport(page, testInfo);
       const publicResponse = await page.goto("/");
       expect(publicResponse?.ok()).toBe(true);
       const pin = page.locator(`[data-testid="map-pin"][aria-label="${name}"]`);
@@ -325,6 +342,7 @@ test.describe("店舗のInstagramリンク(タスク6-2・P-020)", () => {
       await page.getByTestId("detail-sheet-close").click();
 
       // 4. 管理画面で編集し、Instagram URLを空欄にして保存する
+      await useAdminViewport(page, testInfo);
       await page.goto("/admin");
       await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
       await page.getByRole("link", { name: "店舗" }).click();
@@ -345,6 +363,7 @@ test.describe("店舗のInstagramリンク(タスク6-2・P-020)", () => {
 
       // 6. 公開ページの詳細シートからアイコンが消えている
       await blockMapTiles(page);
+      await usePublicViewport(page, testInfo);
       await page.goto("/");
       const pinAfterClear = page.locator(`[data-testid="map-pin"][aria-label="${name}"]`);
       await expect(pinAfterClear).toHaveCount(1);
@@ -355,6 +374,7 @@ test.describe("店舗のInstagramリンク(タスク6-2・P-020)", () => {
       await expect(page.getByTestId("detail-sheet-instagram-link")).toHaveCount(0);
       await page.getByTestId("detail-sheet-close").click();
     } finally {
+      await useAdminViewport(page, testInfo);
       await page.goto("/admin");
       await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
       await page.getByRole("link", { name: "店舗" }).click();
@@ -365,8 +385,9 @@ test.describe("店舗のInstagramリンク(タスク6-2・P-020)", () => {
 
   test("公開ページの詳細シートでは、Instagram登録済みの店舗のみアイコンが表示され新しいタブで開く", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await blockMapTiles(page);
+    await useAdminViewport(page, testInfo);
     await loginAsAdmin(page, "e2e-detail-ig-admin");
 
     const testId = uniqueTestId("e2e-detail-ig");
@@ -417,6 +438,7 @@ test.describe("店舗のInstagramリンク(タスク6-2・P-020)", () => {
       // 公開ページ: Instagram登録済みの店舗はアイコン(リンク)が表示され、
       // href/target/rel/aria-labelが正しい
       await blockMapTiles(page);
+      await usePublicViewport(page, testInfo);
       const publicResponse = await page.goto("/");
       expect(publicResponse?.ok()).toBe(true);
 
@@ -455,6 +477,7 @@ test.describe("店舗のInstagramリンク(タスク6-2・P-020)", () => {
       await page.getByTestId("detail-sheet-close").click();
     } finally {
       // 後片付け: 管理画面へ戻って両店舗を削除する
+      await useAdminViewport(page, testInfo);
       await page.goto("/admin");
       await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
       await page.getByRole("link", { name: "店舗" }).click();

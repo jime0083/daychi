@@ -18,8 +18,14 @@ import { createEmulatorTestUser } from "./support/emulator-auth";
  * 品目名にテスト実行ごとに変わる一意な文字列を埋め込んで判別する。
  *
  * ログイン方式・一意ID生成方式は e2e/shops-crud.spec.ts と同様。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * このファイルの全テストはPC幅(chromium-desktop)のみで実施する。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 async function loginAsAdmin(page: Page): Promise<void> {
   const email = `${uniqueTestId("e2e-visits-admin")}@example.com`;
@@ -35,7 +41,9 @@ async function loginAsAdmin(page: Page): Promise<void> {
 test.describe("訪問登録CRUD(/admin/visits)", () => {
   test("店舗×動画×出演者2名分のメニュー入力→保存→一覧表示→編集→削除ができる", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page);
 
     const testId = uniqueTestId("e2e-visit");
@@ -124,7 +132,9 @@ test.describe("訪問登録CRUD(/admin/visits)", () => {
 
   test("必須項目未入力で作成しようとするとエラーメッセージが表示され作成されない(タスク2-7)", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page);
 
     await page.getByRole("link", { name: "訪問" }).click();
@@ -139,7 +149,11 @@ test.describe("訪問登録CRUD(/admin/visits)", () => {
     await expect(errorList).toContainText("出演者ごとの飲食メニューを1件以上入力してください");
   });
 
-  test("削除確認ダイアログでキャンセルすると削除されない(タスク2-7)", async ({ page }) => {
+  test("削除確認ダイアログでキャンセルすると削除されない(タスク2-7)", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page);
 
     const testId = uniqueTestId("e2e-visit-cancel");

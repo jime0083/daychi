@@ -20,18 +20,30 @@ import { createEmulatorTestUser } from "./support/emulator-auth";
  * サインインする(e2e/support/emulator-auth.ts 参照)。判定ロジック自体
  * (AdminAuthProvider/AdminGate)は本番のGoogleログインと共通のため、
  * 「クレーム有無で表示が分岐する」という検証したい挙動は維持されている。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * このファイルの全テストはPC幅(chromium-desktop)のみで実施する。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 test.describe("管理画面(/admin)の認証・アクセス制御", () => {
-  test("未ログイン時はログイン画面が表示される", async ({ page }) => {
+  test("未ログイン時はログイン画面が表示される", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await page.goto("/admin");
 
     await expect(page.getByRole("heading", { name: "管理画面ログイン" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Googleでログイン" })).toBeVisible();
   });
 
-  test("adminクレームを持つユーザーでログインすると管理画面が表示される", async ({ page }) => {
+  test("adminクレームを持つユーザーでログインすると管理画面が表示される", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     const email = `${uniqueTestId("e2e-admin")}@example.com`;
     await createEmulatorTestUser({ email, password: TEST_PASSWORD, admin: true });
 
@@ -48,7 +60,9 @@ test.describe("管理画面(/admin)の認証・アクセス制御", () => {
 
   test("adminクレームを持たないユーザーでログインするとアクセス拒否画面が表示される", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     const email = `${uniqueTestId("e2e-nonadmin")}@example.com`;
     await createEmulatorTestUser({ email, password: TEST_PASSWORD, admin: false });
 

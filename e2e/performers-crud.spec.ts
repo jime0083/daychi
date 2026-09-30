@@ -19,8 +19,14 @@ import { createEmulatorTestUser } from "./support/emulator-auth";
  * (performer-test-main / performer-test-sub)は他タスクの検証データとして
  * 使われ続けるため、本テストでは一意な名前の新規出演者を作成・編集・削除し、
  * seedデータには一切触れない。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * このファイルの全テストはPC幅(chromium-desktop)のみで実施する。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 async function loginAsAdmin(page: Page): Promise<void> {
   const email = `${uniqueTestId("e2e-performers-admin")}@example.com`;
@@ -34,7 +40,9 @@ async function loginAsAdmin(page: Page): Promise<void> {
 }
 
 test.describe("出演者マスタCRUD(/admin/performers)", () => {
-  test("作成→一覧表示→編集→削除の一連操作ができる", async ({ page }) => {
+  test("作成→一覧表示→編集→削除の一連操作ができる", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page);
 
     await page.getByRole("link", { name: "出演者" }).click();
@@ -87,7 +95,9 @@ test.describe("出演者マスタCRUD(/admin/performers)", () => {
 
   test("名前未入力で作成しようとするとエラーメッセージが表示され作成されない(タスク2-7)", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page);
 
     await page.getByRole("link", { name: "出演者" }).click();
@@ -101,7 +111,11 @@ test.describe("出演者マスタCRUD(/admin/performers)", () => {
     await expect(page.getByTestId("performer-create-name")).toHaveValue("");
   });
 
-  test("削除確認ダイアログでキャンセルすると削除されない(タスク2-7)", async ({ page }) => {
+  test("削除確認ダイアログでキャンセルすると削除されない(タスク2-7)", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page);
 
     await page.getByRole("link", { name: "出演者" }).click();

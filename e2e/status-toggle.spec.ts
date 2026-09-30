@@ -19,8 +19,14 @@ import { mockGeocode } from "./support/geocode-mock";
  * リトライ時の状態に影響しない。
  *
  * ログイン方式・一意ID生成方式は e2e/videos-crud.spec.ts 等と同様。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * このファイルの全テストはPC幅(chromium-desktop)のみで実施する。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 async function loginAsAdmin(page: Page, emailPrefix: string): Promise<void> {
   const email = `${uniqueTestId(emailPrefix)}@example.com`;
@@ -42,7 +48,9 @@ function uniqueVideoId(): string {
 test.describe("公開ステータス管理(draft⇔published切替)", () => {
   test("動画一覧: draft→published→draftに切り替えると一覧表示が即時反映される", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page, "e2e-status-videos-admin");
 
     const videoId = uniqueVideoId();
@@ -93,7 +101,9 @@ test.describe("公開ステータス管理(draft⇔published切替)", () => {
 
   test("店舗一覧: draft→published→draftに切り替えると一覧表示が即時反映される", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await page.route("**/tiles.openfreemap.org/**", async (route) => {
       await route.abort();
     });
@@ -145,7 +155,9 @@ test.describe("公開ステータス管理(draft⇔published切替)", () => {
 
   test("訪問一覧: draft→published→draftに切り替えると一覧表示が即時反映される", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page, "e2e-status-visits-admin");
 
     const testId = uniqueTestId("e2e-status-visit");

@@ -37,8 +37,14 @@ import { createEmulatorTestUser } from "./support/emulator-auth";
  * 解決できず "Cannot find module '@/lib/firebase'" で失敗することを確認済み。
  * そのため直接Firestore操作が必要な箇所は本ファイルのように @firebase/rules-unit-testing を
  * 直接使う(静的importのみで完結する)。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * このファイルの全テストはPC幅(chromium-desktop)のみで実施する。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 // scripts/seed.ts の SEED_PROJECT_ID / playwright.config.ts の E2E_EMULATOR_PROJECT_ID と
 // 一致させる(同じFirestore Emulator名前空間に書き込むため)
@@ -61,7 +67,9 @@ async function openTagsPage(page: Page): Promise<void> {
 }
 
 test.describe("タグマスタCRUD(/admin/tags)", () => {
-  test("作成→一覧表示→編集→削除の一連操作ができる", async ({ page }) => {
+  test("作成→一覧表示→編集→削除の一連操作ができる", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page);
     await openTagsPage(page);
 
@@ -110,7 +118,9 @@ test.describe("タグマスタCRUD(/admin/tags)", () => {
 
   test("同じ名前のタグは作成できず、編集での名前変更も他タグと同名にはできない(前後空白を除いて比較)", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page);
     await openTagsPage(page);
 
@@ -172,7 +182,9 @@ test.describe("タグマスタCRUD(/admin/tags)", () => {
 
   test("店舗に付いているタグを削除すると確認ダイアログに店舗数が表示され、削除後は全店舗のtagIdsから外れる", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     const testEnv: RulesTestEnvironment = await initializeTestEnvironment({
       projectId: EMULATOR_PROJECT_ID,
       firestore: {

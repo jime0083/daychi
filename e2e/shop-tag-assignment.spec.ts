@@ -32,8 +32,14 @@ import { mockGeocode } from "./support/geocode-mock";
  * (`await import(...)`)しないこと(e2e/tags-crud.spec.tsのコメント参照。
  * "@/*" パスエイリアス解決の制約のため、直接Firestore操作は
  * @firebase/rules-unit-testing を直接使う)。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * このファイルの全テストはPC幅(chromium-desktop)のみで実施する。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 // scripts/seed.ts の SEED_PROJECT_ID / playwright.config.ts の E2E_EMULATOR_PROJECT_ID と一致
 const EMULATOR_PROJECT_ID = "demo-daychi-coffee-map";
@@ -287,7 +293,11 @@ async function runReviewShopTagFlow(
 }
 
 test.describe("店舗へのタグ付与UI(タスク5-2)", () => {
-  test("/admin/shops: タグを選択して保存すると一覧・編集フォームで保持される", async ({ page }) => {
+  test("/admin/shops: タグを選択して保存すると一覧・編集フォームで保持される", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await page.route("**/tiles.openfreemap.org/**", async (route) => {
       await route.abort();
     });
@@ -305,7 +315,9 @@ test.describe("店舗へのタグ付与UI(タスク5-2)", () => {
 
   test("/admin/review/[videoId]: 店舗カードでタグを選択して保存すると承認後・再読み込み後も保持される", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await page.route("**/tiles.openfreemap.org/**", async (route) => {
       await route.abort();
     });

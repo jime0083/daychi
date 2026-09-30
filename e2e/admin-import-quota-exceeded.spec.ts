@@ -15,8 +15,14 @@ import { createEmulatorTestUser } from "./support/emulator-auth";
  * error.code=GEMINI_DAILY_QUOTA_EXCEEDED)、3本目=成功、の3本を選択して取り込みを実行する。
  * 2本目で処理が中止され、3本目のextractは一切呼ばれないこと・理由(import-quota-exceeded)が
  * 表示されること・1本目の成功結果はそのまま表示され続けることを確認する。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * このファイルの全テストはPC幅(chromium-desktop)のみで実施する。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 async function loginAsAdmin(page: Page, emailPrefix: string): Promise<void> {
   const email = `${uniqueTestId(emailPrefix)}@example.com`;
@@ -35,7 +41,11 @@ function uniqueVideoId(): string {
 }
 
 test.describe("AI取り込み: Geminiの1日上限に達したら残りの動画の処理を中止する(タスク4-3e, P-017)", () => {
-  test("1本目成功→2本目で1日上限→3本目のextractは呼ばれず理由が表示される", async ({ page }) => {
+  test("1本目成功→2本目で1日上限→3本目のextractは呼ばれず理由が表示される", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     const testId = uniqueTestId("e2e-import-quota");
     const okVideoId = uniqueVideoId();
     const quotaVideoId = uniqueVideoId();

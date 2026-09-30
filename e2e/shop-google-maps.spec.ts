@@ -6,6 +6,7 @@ import { uniqueTestId } from "@/repositories/test-support";
 import { createEmulatorTestUser } from "./support/emulator-auth";
 import { getShopRawFieldsByName } from "./support/firestore-raw";
 import { mockGeocode } from "./support/geocode-mock";
+import { useAdminViewport, usePublicViewport } from "./support/viewport";
 
 /**
  * タスク6-3(「Googleマップで開く」ボタン・Place ID・営業時間空欄時の案内、P-021)のE2Eテスト。
@@ -33,10 +34,20 @@ import { mockGeocode } from "./support/geocode-mock";
  * 遠方座標を使うと無関係なテストのfitBounds/ピンクリックを巻き込んで失敗させるため)。
  *
  * テスト用データはこのファイル自身が作成・削除する(共有seedの値は書き換えない。P-018)。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * 管理画面の操作のみで完結するテスト(店舗管理画面・ReviewShopCardでの登録)はPC幅
+ * (chromium-desktop)のみで実施する。管理画面での登録に続けて公開ページのモバイル表示を
+ * 検証するテストは、e2e/support/viewport.ts で管理画面操作の間だけPC幅に切り替え、
+ * 公開ページの検証区間は本来のモバイル幅に戻すことで、モバイル幅での公開ページ検証を
+ * 引き続き行う(検証内容は弱めない)。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
 const VALID_PLACE_ID = "ChIJTestPlaceId_e2e-123";
 const INVALID_PLACE_ID = "invalid place id!";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のみのE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 async function blockMapTiles(page: Page): Promise<void> {
   await page.route("**/tiles.openfreemap.org/**", async (route) => {
@@ -79,7 +90,9 @@ async function deleteShopByName(page: Page, name: string): Promise<void> {
 test.describe("Googleマップで開く・Place ID・営業時間空欄案内(タスク6-3・P-021)", () => {
   test("店舗管理画面でGoogle Place IDを登録・保存・再表示で保持でき、不正な値はエラーになる", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await blockMapTiles(page);
     await loginAsAdmin(page, "e2e-shop-pid-admin");
 
@@ -158,7 +171,9 @@ test.describe("Googleマップで開く・Place ID・営業時間空欄案内(�
 
   test("AI取り込みレビュー画面(ReviewShopCard)でGoogle Place IDを登録・保存・再表示で保持でき、不正な値はエラーになる", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await blockMapTiles(page);
 
     const testId = uniqueTestId("e2e-review-pid");
@@ -290,8 +305,9 @@ test.describe("Googleマップで開く・Place ID・営業時間空欄案内(�
 
   test("公開ページの詳細シートに「Googleマップで開く」ボタンが常に表示され、Place IDの有無で正しいURLを新しいタブで開く。営業時間空欄の店舗は案内文言が表示される", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await blockMapTiles(page);
+    await useAdminViewport(page, testInfo);
     await loginAsAdmin(page, "e2e-detail-gmap-admin");
 
     const testId = uniqueTestId("e2e-detail-gmap");
@@ -352,6 +368,7 @@ test.describe("Googleマップで開く・Place ID・営業時間空欄案内(�
       await createAndPublishShop(shopEmptyHoursName, shopEmptyHoursAddress, "", "");
 
       await blockMapTiles(page);
+      await usePublicViewport(page, testInfo);
       const publicResponse = await page.goto("/");
       expect(publicResponse?.ok()).toBe(true);
 
@@ -426,6 +443,7 @@ test.describe("Googleマップで開く・Place ID・営業時間空欄案内(�
       await expect(page.getByTestId("detail-sheet-google-maps-link")).toHaveCount(1);
       await page.getByTestId("detail-sheet-close").click();
     } finally {
+      await useAdminViewport(page, testInfo);
       await page.goto("/admin");
       await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
       await page.getByRole("link", { name: "店舗" }).click();

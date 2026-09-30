@@ -23,8 +23,14 @@ import { mockGeocode } from "./support/geocode-mock";
  * 地図・外部ジオコーディングAPIが原因でテストがflakyになることを避ける。
  *
  * ログイン方式・一意ID生成方式は e2e/videos-crud.spec.ts と同様。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * このファイルの全テストはPC幅(chromium-desktop)のみで実施する。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 async function loginAsAdmin(page: Page): Promise<void> {
   const email = `${uniqueTestId("e2e-shops-admin")}@example.com`;
@@ -38,7 +44,9 @@ async function loginAsAdmin(page: Page): Promise<void> {
 }
 
 test.describe("店舗登録CRUD(/admin/shops)", () => {
-  test("フォーム入力+座標指定→保存→一覧表示→編集→削除ができる", async ({ page }) => {
+  test("フォーム入力+座標指定→保存→一覧表示→編集→削除ができる", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     // 地図タイル/スタイルへのネットワークリクエストは外部依存のためブロックする
     // (MapLibreの初期化自体は行われるが、タイル取得の成否はこのテストの検証対象外)
     await page.route("**/tiles.openfreemap.org/**", async (route) => {
@@ -111,7 +119,9 @@ test.describe("店舗登録CRUD(/admin/shops)", () => {
 
   test("必須項目未入力で作成しようとするとエラーメッセージが表示され作成されない(タスク2-7)", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await page.route("**/tiles.openfreemap.org/**", async (route) => {
       await route.abort();
     });
@@ -130,7 +140,11 @@ test.describe("店舗登録CRUD(/admin/shops)", () => {
     await expect(errorList).toContainText("情報基準日を入力してください");
   });
 
-  test("削除確認ダイアログでキャンセルすると削除されない(タスク2-7)", async ({ page }) => {
+  test("削除確認ダイアログでキャンセルすると削除されない(タスク2-7)", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await page.route("**/tiles.openfreemap.org/**", async (route) => {
       await route.abort();
     });
@@ -166,7 +180,9 @@ test.describe("店舗登録CRUD(/admin/shops)", () => {
 
   test("ジオコード結果が0件の場合は分かりやすいエラーが表示される(タスク2-4c)", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await page.route("**/tiles.openfreemap.org/**", async (route) => {
       await route.abort();
     });

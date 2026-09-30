@@ -24,8 +24,14 @@ import { createEmulatorTestUser } from "./support/emulator-auth";
  * seedスクリプト(scripts/seed.ts)が投入する固定IDの動画(dAyChiTEST1 /
  * dAyChiTEST2)は他タスクの検証データとして使われ続けるため、本テストでは
  * 一意な動画IDの新規動画を作成・編集・削除し、seedデータには一切触れない。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * このファイルの全テストはPC幅(chromium-desktop)のみで実施する。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 async function loginAsAdmin(page: Page): Promise<void> {
   const email = `${uniqueTestId("e2e-videos-admin")}@example.com`;
@@ -50,7 +56,11 @@ function uniqueVideoId(): string {
 }
 
 test.describe("動画登録CRUD(/admin/videos)", () => {
-  test("URL貼付→タイトル自動入力→保存→一覧にサムネ表示→編集→削除ができる", async ({ page }) => {
+  test("URL貼付→タイトル自動入力→保存→一覧にサムネ表示→編集→削除ができる", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page);
 
     const videoId = uniqueVideoId();
@@ -121,7 +131,9 @@ test.describe("動画登録CRUD(/admin/videos)", () => {
 
   test("必須項目未入力で作成しようとするとエラーメッセージが表示され作成されない(タスク2-7)", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page);
 
     await page.getByRole("link", { name: "動画" }).click();
@@ -136,7 +148,11 @@ test.describe("動画登録CRUD(/admin/videos)", () => {
     await expect(errorList).toContainText("公開日を入力してください");
   });
 
-  test("削除確認ダイアログでキャンセルすると削除されない(タスク2-7)", async ({ page }) => {
+  test("削除確認ダイアログでキャンセルすると削除されない(タスク2-7)", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     await loginAsAdmin(page);
 
     const videoId = uniqueVideoId();

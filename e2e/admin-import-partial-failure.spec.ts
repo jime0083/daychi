@@ -11,8 +11,14 @@ import { createEmulatorTestUser } from "./support/emulator-auth";
  * 選択した複数動画のうち1本の /api/admin/import/extract が失敗(502)しても、
  * 他の動画の取り込みは続行され、それぞれ独立した成功/失敗として結果表示されることを検証する
  * (src/app/admin/import/page.tsx handleRunImport の for ループ内try/catchに対応)。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * このファイルの全テストはPC幅(chromium-desktop)のみで実施する。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
+const ADMIN_ONLY_SKIP_REASON =
+  "管理画面はPC専用のため管理画面操作のE2EはPC幅(chromium-desktop)のみで実施する" +
+  "(requirements.md 3.2、2026-09-30決定。problem.txt P-030)";
 
 async function loginAsAdmin(page: Page, emailPrefix: string): Promise<void> {
   const email = `${uniqueTestId(emailPrefix)}@example.com`;
@@ -31,7 +37,11 @@ function uniqueVideoId(): string {
 }
 
 test.describe("AI取り込み: 1本の抽出失敗が他の動画に波及しない(タスク4-4 観点3)", () => {
-  test("2本選択し1本目のextractが失敗しても2本目は取り込み成功する", async ({ page }) => {
+  test("2本選択し1本目のextractが失敗しても2本目は取り込み成功する", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop", ADMIN_ONLY_SKIP_REASON);
+
     const testId = uniqueTestId("e2e-import-partial");
     const failVideoId = uniqueVideoId();
     const okVideoId = uniqueVideoId();

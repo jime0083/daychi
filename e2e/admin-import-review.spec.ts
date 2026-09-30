@@ -4,6 +4,7 @@ import { uniqueTestId } from "@/repositories/test-support";
 
 import { createEmulatorTestUser } from "./support/emulator-auth";
 import { mockGeocode } from "./support/geocode-mock";
+import { useAdminViewport, usePublicViewport } from "./support/viewport";
 
 /**
  * タスク4-4(管理画面: 取り込み実行とレビューUI)のE2Eテスト。
@@ -27,6 +28,10 @@ import { mockGeocode } from "./support/geocode-mock";
  *
  * Firestoreへの実書き込み(saveDraftExtraction・レビュー画面での各種更新・承認)は
  * すべて実際にAuth/Firestore Emulatorに対して行われる(モックしない)。
+ *
+ * タスク6-3b(P-030)対応: 管理画面はPC専用(requirements.md 3.2、2026-09-30決定)のため、
+ * 取り込み→レビュー→承認の管理画面操作はe2e/support/viewport.tsでPC幅に切り替えて行い、
+ * 公開ページの検証区間だけ本来のモバイル幅に戻す(モバイル幅での公開ページ検証は弱めない)。
  */
 const TEST_PASSWORD = "e2e-test-password-123";
 /** P-009対応: seed店舗・他タスクのE2Eと重ならない決定的な座標(review-shops-crud等と別値) */
@@ -53,11 +58,13 @@ function uniqueVideoId(): string {
 test.describe("AI取り込み→レビュー→承認(タスク4-4)", () => {
   test("取り込み実行→下書き作成→座標未確定/未割り当て出演者を解消して承認→公開ページに表示される", async ({
     page,
-  }) => {
+  }, testInfo) => {
     // 地図タイル(admin側のShopLocationPicker・公開ページの両方で使用)は外部依存のためブロックする
     await page.route("**/tiles.openfreemap.org/**", async (route) => {
       await route.abort();
     });
+    // タスク6-3b(P-030)対応: 取り込み・レビュー・承認の管理画面操作はPC幅で行う
+    await useAdminViewport(page, testInfo);
 
     const testId = uniqueTestId("e2e-import");
     const videoId = uniqueVideoId();
@@ -203,6 +210,7 @@ test.describe("AI取り込み→レビュー→承認(タスク4-4)", () => {
     await expect(page.getByTestId("review-video-status")).toContainText("公開");
 
     // 公開ページ: ピンと詳細シートに反映されていることを確認する
+    await usePublicViewport(page, testInfo);
     const publicResponse = await page.goto("/");
     expect(publicResponse?.ok()).toBe(true);
     const pin = page.locator(`[data-testid="map-pin"][aria-label="${shopName}"]`);
@@ -232,6 +240,7 @@ test.describe("AI取り込み→レビュー→承認(タスク4-4)", () => {
 
     // 後片付け: 管理画面から作成した訪問・動画・店舗・新規出演者をすべて削除する
     await page.getByTestId("detail-sheet-close").click();
+    await useAdminViewport(page, testInfo);
     await page.goto("/admin");
     await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
 
