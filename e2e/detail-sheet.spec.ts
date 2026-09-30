@@ -56,7 +56,7 @@ async function loginAsAdmin(page: Page, emailPrefix: string): Promise<void> {
   await page.getByTestId("emulator-test-email").fill(email);
   await page.getByTestId("emulator-test-password").fill(TEST_PASSWORD);
   await page.getByTestId("emulator-test-login-submit").click();
-  await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+  await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
 }
 
 /** e2e/videos-crud.spec.ts と同じ生成ロジック(YouTube動画ID形式に合致させる) */
@@ -319,7 +319,7 @@ test.describe("スライドアップ詳細シート", () => {
     // (詳細シートを開くために公開ページ"/"へ遷移していたため、管理画面へ戻る)
     await page.getByTestId("detail-sheet-close").click();
     await page.goto("/admin");
-    await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+    await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
 
     await page.getByRole("link", { name: "訪問" }).click();
     for (const videoTitle of [earlyVideo.title, lateVideo.title]) {

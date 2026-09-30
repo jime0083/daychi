@@ -1,4 +1,4 @@
-# Daychi COFFEE MAP - 手動作業タスク (manual-work.txt)
+# DayChi COFFEE MAP - 手動作業タスク (manual-work.txt)
 # 運用ルール:
 # - Claudeが代行できない外部サービス設定・データ提供・意思決定をここで管理する
 # - 各Workの「最終ライン」= progress.txt のどのタスク開始前までに完了が必要か

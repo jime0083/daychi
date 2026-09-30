@@ -63,7 +63,7 @@ async function loginAsAdmin(page: Page, emailPrefix: string): Promise<void> {
   await page.getByTestId("emulator-test-email").fill(email);
   await page.getByTestId("emulator-test-password").fill(TEST_PASSWORD);
   await page.getByTestId("emulator-test-login-submit").click();
-  await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+  await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
 }
 
 /** e2e/videos-crud.spec.ts と同じ生成ロジック(YouTube動画ID形式に合致させる) */
@@ -276,7 +276,7 @@ test.describe("Googleマップで開く・Place ID・営業時間空欄案内(�
     } finally {
       // 後片付け: このテストが作成した訪問・動画・店舗をすべて削除する
       await page.goto("/admin");
-      await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+      await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
 
       await page.getByRole("link", { name: "訪問" }).click();
       const visitRow = page.getByTestId("visit-row").filter({ hasText: videoTitle });
@@ -445,7 +445,7 @@ test.describe("Googleマップで開く・Place ID・営業時間空欄案内(�
     } finally {
       await useAdminViewport(page, testInfo);
       await page.goto("/admin");
-      await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+      await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
       await page.getByRole("link", { name: "店舗" }).click();
       await expect(page.getByRole("heading", { name: "店舗マスタ" })).toBeVisible();
       await deleteShopByName(page, shopWithPidName);

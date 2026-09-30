@@ -56,7 +56,7 @@ async function loginAsAdmin(page: Page, emailPrefix: string): Promise<void> {
   await page.getByTestId("emulator-test-email").fill(email);
   await page.getByTestId("emulator-test-password").fill(TEST_PASSWORD);
   await page.getByTestId("emulator-test-login-submit").click();
-  await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+  await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
 }
 
 interface CreatePublishedShopParams {
@@ -129,7 +129,7 @@ async function createPublishedVisit(
 /** このテストが作成した訪問(店舗名一致)をすべて削除する */
 async function cleanupVisitsForShop(page: Page, shopName: string): Promise<void> {
   await page.goto("/admin");
-  await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+  await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
   await page.getByRole("link", { name: "訪問" }).click();
   for (const row of await page
     .getByTestId("visit-row")
@@ -144,7 +144,7 @@ async function cleanupVisitsForShop(page: Page, shopName: string): Promise<void>
 /** このテストが作成した店舗(店舗名一致)を削除する */
 async function cleanupShop(page: Page, shopName: string): Promise<void> {
   await page.goto("/admin");
-  await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+  await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
   await page.getByRole("link", { name: "店舗" }).click();
   const shopRow = page.getByTestId("shop-row").filter({ hasText: shopName });
   if ((await shopRow.count()) === 0) {

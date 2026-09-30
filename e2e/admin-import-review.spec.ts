@@ -46,7 +46,7 @@ async function loginAsAdmin(page: Page, emailPrefix: string): Promise<void> {
   await page.getByTestId("emulator-test-email").fill(email);
   await page.getByTestId("emulator-test-password").fill(TEST_PASSWORD);
   await page.getByTestId("emulator-test-login-submit").click();
-  await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+  await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
 }
 
 /** e2e/videos-crud.spec.ts と同じ生成ロジック(YouTube動画ID形式に合致させる) */
@@ -242,7 +242,7 @@ test.describe("AI取り込み→レビュー→承認(タスク4-4)", () => {
     await page.getByTestId("detail-sheet-close").click();
     await useAdminViewport(page, testInfo);
     await page.goto("/admin");
-    await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+    await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
 
     await page.getByRole("link", { name: "訪問" }).click();
     const visitRow = page.getByTestId("visit-row").filter({ hasText: videoTitle });

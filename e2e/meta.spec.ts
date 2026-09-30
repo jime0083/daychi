@@ -9,10 +9,10 @@ test.describe("メタ情報", () => {
   test("トップページにタイトル/OGP/faviconが設定されている", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page).toHaveTitle(/Daychi COFFEE MAP/);
+    await expect(page).toHaveTitle(/DayChi COFFEE MAP/);
 
     const ogTitle = page.locator('meta[property="og:title"]');
-    await expect(ogTitle).toHaveAttribute("content", /Daychi COFFEE MAP/);
+    await expect(ogTitle).toHaveAttribute("content", /DayChi COFFEE MAP/);
 
     const ogType = page.locator('meta[property="og:type"]');
     await expect(ogType).toHaveAttribute("content", "website");

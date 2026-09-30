@@ -1,4 +1,4 @@
-# Daychi COFFEE MAP - 問題管理 (problem.txt)
+# DayChi COFFEE MAP - 問題管理 (problem.txt)
 # 運用ルール:
 # - 開発中に見つかった問題(想定した動きをしない、デザイン崩れ等)は全てここに記録する
 # - 修正プロセス(CLAUDE.md「問題修正プロセス」参照・省略禁止):

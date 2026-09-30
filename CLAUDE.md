@@ -1,4 +1,4 @@
-# Daychi COFFEE MAP プロジェクトルール
+# DayChi COFFEE MAP プロジェクトルール
 
 YouTubeチャンネル「Daychi〜COFFEE CHANNEL」で紹介されたコーヒー店を地図で確認できるWebサービス。
 仕様の唯一の正は `requirements.md`。

@@ -29,7 +29,7 @@ export function AdminShell({ user, children }: { user: User; children: ReactNode
     <div className="flex min-h-full flex-1 flex-col">
       <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950">
         <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-          Daychi COFFEE MAP 管理画面
+          DayChi COFFEE MAP 管理画面
         </span>
         <div className="flex items-center gap-4">
           <span className="text-sm text-zinc-500 dark:text-zinc-400">{user.email}</span>

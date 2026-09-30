@@ -41,7 +41,7 @@ async function loginAsAdmin(page: Page): Promise<void> {
   await page.getByTestId("emulator-test-email").fill(email);
   await page.getByTestId("emulator-test-password").fill(TEST_PASSWORD);
   await page.getByTestId("emulator-test-login-submit").click();
-  await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+  await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
 }
 
 /**

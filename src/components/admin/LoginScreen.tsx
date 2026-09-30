@@ -58,7 +58,7 @@ export function LoginScreen() {
         <div className="flex flex-col items-center gap-1 text-center">
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">管理画面ログイン</h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Daychi COFFEE MAP の管理者アカウントでログインしてください
+            DayChi COFFEE MAP の管理者アカウントでログインしてください
           </p>
         </div>
 

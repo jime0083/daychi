@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const SITE_NAME = "Daychi COFFEE MAP";
+const SITE_NAME = "DayChi COFFEE MAP";
 const SITE_DESCRIPTION =
   "YouTubeチャンネル「Daychi〜COFFEE CHANNEL」で紹介されたコーヒー店を地図で確認できるサービス";
 

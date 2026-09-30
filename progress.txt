@@ -1,4 +1,4 @@
-# Daychi COFFEE MAP - 実装タスク進捗 (progress.txt)
+# DayChi COFFEE MAP - 実装タスク進捗 (progress.txt)
 # 運用ルール:
 # - 各タスクは daychi-impl で実装し、daychi-review のE2E/検証合格で [x] にする
 # - タスクは上から順に実施する(依存関係順)
@@ -481,7 +481,8 @@ Phase 6: 改善(ユーザーフィードバック 2026-09-25)
 Phase 7: 公開ページのUI改善(2026-09-30追加)
 =====================================
 
-[ ] 7-1 サービス名表記を「DayChi COFFEE MAP」に統一
+[x] 7-1 サービス名表記を「DayChi COFFEE MAP」に統一
+    ※完了(2026-10-01): daychi-review PASS(旧表記の残りなし、タイトル/OGP確認、フルE2E連続2回失敗0)
     内容: 公開ページ・管理画面・ブラウザのタブのタイトル(metadata)・アイコン等の「Daychi COFFEE MAP」表記を
           「DayChi COFFEE MAP」に変更(requirements.md 1. 2026-09-30変更)。E2Eの期待値も合わせる
     完了条件: 画面・タイトルに旧表記が残っていない(grepで確認)。E2E合格

@@ -52,7 +52,7 @@ test.describe("管理画面(/admin)の認証・アクセス制御", () => {
     await page.getByTestId("emulator-test-password").fill(TEST_PASSWORD);
     await page.getByTestId("emulator-test-login-submit").click();
 
-    await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toBeVisible();
+    await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "管理メニュー" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "アクセス権がありません" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "ログアウト" })).toBeVisible();
@@ -72,7 +72,7 @@ test.describe("管理画面(/admin)の認証・アクセス制御", () => {
     await page.getByTestId("emulator-test-login-submit").click();
 
     await expect(page.getByRole("heading", { name: "アクセス権がありません" })).toBeVisible();
-    await expect(page.getByText("Daychi COFFEE MAP 管理画面")).toHaveCount(0);
+    await expect(page.getByText("DayChi COFFEE MAP 管理画面")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "ログアウト" })).toBeVisible();
   });
 });
