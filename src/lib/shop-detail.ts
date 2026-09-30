@@ -10,6 +10,10 @@
  *   (visits.ts の listPublishedVisits は既に status=="published" のみ返すが、
  *   video側は個別に取得していないため、突合時に改めてstatusを確認する必要がある)
  * - 対象の店舗(shopId一致)に絞り込み、動画公開日の昇順(紹介された順)で並べる
+ *
+ * タスク6-3(P-021)で formatBusinessHours を追加: 営業時間(businessHours)が空欄
+ * (空白のみ含む)の店舗は、詳細シートの営業時間欄に案内文言を表示する
+ * (requirements.md 2026-09-25決定)。
  */
 import type { Video } from "@/types/video";
 import type { Visit } from "@/types/visit";
@@ -52,4 +56,17 @@ export function resolveShopVisitDetails(
   }
 
   return [...details].sort((a, b) => a.video.publishedAt.toMillis() - b.video.publishedAt.toMillis());
+}
+
+/** 営業時間欄が空欄(空白のみを含む)の場合に案内する文言(タスク6-3・P-021) */
+export const BUSINESS_HOURS_UNSET_MESSAGE = "Googleマップでご確認ください";
+
+/**
+ * 詳細シートの営業時間欄に表示する文字列を組み立てる(タスク6-3・P-021)。
+ * requirements.md「3.1 公開ページ」の「営業時間(businessHours)は入力任意。空欄の店舗は
+ * 詳細シートの営業時間欄に『Googleマップでご確認ください』と表示する」(2026-09-25決定)に
+ * 対応する。空白のみの入力も空欄として扱う。
+ */
+export function formatBusinessHours(businessHours: string): string {
+  return businessHours.trim() === "" ? BUSINESS_HOURS_UNSET_MESSAGE : businessHours;
 }

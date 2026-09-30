@@ -51,16 +51,27 @@
  *   いる場合のみInstagramアイコン(汎用的なカメラ形。Instagram公式ロゴは模倣しない。
  *   src/components/icons/CameraIcon.tsx)を表示し、押すと新しいタブ(rel="noopener
  *   noreferrer")で当該アカウントを開く。未登録(undefined/空文字)の店舗はアイコンを
- *   表示しない。タスク6-3で「Googleマップで開く」ボタンが同じ行に横並びで追加される
- *   予定のため、あらかじめflex行(detail-sheet-shop-actions)としてレイアウトを
- *   用意しておく。
+ *   表示しない。
+ *
+ * タスク6-3で追加した表示項目(requirements.md 2026-09-25決定・P-021):
+ * - 店舗情報欄下部の同じ行(detail-sheet-shop-actions)に「Googleマップで開く」ボタン
+ *   (リンク)を常に表示する。店名+住所を検索語にしたGoogle Maps URLs
+ *   (src/lib/google-maps.tsのbuildGoogleMapsSearchUrl)を新しいタブ(rel="noopener
+ *   noreferrer")で開く。shop.googlePlaceIdが登録されている場合はquery_place_idも
+ *   付与し、確実にその店舗ページを開く。Google Maps Platformの有料API・APIキーは
+ *   一切使わない(URLを開くだけ)。
+ * - 営業時間(businessHours)が空欄(空白のみ含む)の店舗は、営業時間欄に
+ *   「Googleマップでご確認ください」と表示する(src/lib/shop-detail.tsの
+ *   formatBusinessHours)。Googleの店舗情報を保存することはGoogle Maps Platform
+ *   規約で禁止のため、最新の営業時間は「Googleマップで開く」経由で確認してもらう方針。
  */
 import { CameraIcon } from "@/components/icons/CameraIcon";
 import type { Performer } from "@/types/performer";
 import type { Shop } from "@/types/shop";
 import type { Tag } from "@/types/tag";
-import type { ShopVisitDetail } from "@/lib/shop-detail";
+import { formatBusinessHours, type ShopVisitDetail } from "@/lib/shop-detail";
 import { formatDateJa, formatInfoAsOf } from "@/lib/date-format";
+import { buildGoogleMapsSearchUrl } from "@/lib/google-maps";
 import { resolveShopTags } from "@/lib/shop-filter";
 import { buildYoutubeThumbnailUrl, buildYoutubeWatchUrl } from "@/lib/youtube";
 
@@ -86,6 +97,8 @@ export function DetailSheet({ shop, visitDetails, performers, tags, onClose }: D
   const shopTags = shop === null ? [] : resolveShopTags(shop, tags);
   const instagramUrl = shop?.instagramUrl?.trim() ?? "";
   const hasInstagram = instagramUrl !== "";
+  const googleMapsUrl =
+    shop === null ? "" : buildGoogleMapsSearchUrl(shop.name, shop.address, shop.googlePlaceId);
 
   return (
     <>
@@ -212,7 +225,9 @@ export function DetailSheet({ shop, visitDetails, performers, tags, onClose }: D
 
             <div className="flex flex-col gap-1 border-t border-zinc-100 pt-3 text-sm text-zinc-700 dark:border-zinc-900 dark:text-zinc-300">
               <p data-testid="detail-sheet-address">住所: {shop.address}</p>
-              <p data-testid="detail-sheet-business-hours">営業時間: {shop.businessHours}</p>
+              <p data-testid="detail-sheet-business-hours">
+                営業時間: {formatBusinessHours(shop.businessHours)}
+              </p>
               <p
                 data-testid="detail-sheet-info-as-of"
                 className="text-xs text-zinc-400 dark:text-zinc-500"
@@ -220,8 +235,6 @@ export function DetailSheet({ shop, visitDetails, performers, tags, onClose }: D
                 {formatInfoAsOf(shop.infoAsOf)}
               </p>
 
-              {/* タスク6-3で「Googleマップで開く」ボタンをこの行に追加する予定のため、
-                  常にflex行として用意しておく(上のコメント参照) */}
               <div data-testid="detail-sheet-shop-actions" className="flex flex-wrap items-center gap-2 pt-1">
                 {hasInstagram && (
                   <a
@@ -235,6 +248,15 @@ export function DetailSheet({ shop, visitDetails, performers, tags, onClose }: D
                     <CameraIcon className="h-5 w-5" />
                   </a>
                 )}
+                <a
+                  data-testid="detail-sheet-google-maps-link"
+                  href={googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-9 items-center justify-center rounded-full border border-zinc-300 px-3 text-sm text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                >
+                  Googleマップで開く
+                </a>
               </div>
             </div>
           </div>

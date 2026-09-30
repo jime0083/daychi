@@ -33,6 +33,15 @@ export interface ShopData {
    */
   instagramUrl?: string;
   /**
+   * GoogleマップのPlace ID(任意)。管理者が店舗フォーム/レビュー画面で手入力する
+   * (Place ID Finder等で調べる。AI抽出では扱わない)。英数字・ハイフン・アンダースコアの
+   * みを許可(src/lib/validation.tsのvalidatePlaceIdでバリデーション、タスク6-3・P-021)。
+   * 詳細シートの「Googleマップで開く」ボタン(src/lib/google-maps.tsの
+   * buildGoogleMapsSearchUrl)でquery_place_idとして使い、確実にその店舗ページを開く。
+   * 未設定または空文字は「登録なし」を表す(instagramUrlと同じ扱い)。
+   */
+  googlePlaceId?: string;
+  /**
    * AI抽出の下書きで座標未確定(住所からジオコードできなかった)なら false。
    * 未設定の場合は確定済み扱い。false の間はレビュー画面で管理者がピンを置いて
    * 確定させるまで承認(published化)できない(requirements.md 2026-09-23決定)。
@@ -62,6 +71,7 @@ export const shopConverter: FirestoreDataConverter<Shop, ShopData> = {
       // Firestoreはundefined値のフィールドを書き込めないため、未設定の場合は
       // キー自体を含めない(instagramUrlはlocationConfirmedと同じ理由)。
       ...(shop.instagramUrl !== undefined ? { instagramUrl: shop.instagramUrl } : {}),
+      ...(shop.googlePlaceId !== undefined ? { googlePlaceId: shop.googlePlaceId } : {}),
       ...(shop.locationConfirmed !== undefined ? { locationConfirmed: shop.locationConfirmed } : {}),
       status: shop.status,
       createdAt: shop.createdAt,
@@ -80,6 +90,7 @@ export const shopConverter: FirestoreDataConverter<Shop, ShopData> = {
       closed: data.closed,
       tagIds: data.tagIds,
       instagramUrl: data.instagramUrl,
+      googlePlaceId: data.googlePlaceId,
       locationConfirmed: data.locationConfirmed,
       status: data.status,
       createdAt: data.createdAt,

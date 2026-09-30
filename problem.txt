@@ -1038,3 +1038,19 @@
 - 特定した原因: 保存ボタンに送信中の状態管理がない
 - 切り出したタスク: (未定。実害が確認された時点、または管理画面の改善時にタスク化する)
 
+## P-029: モバイルで出演者/タグの絞り込み欄が他の要素のクリックを奪う
+- 記録日: 2026-09-30
+- 状態: 調査中
+- 発生箇所: e2e/admin-import-review.spec.ts:54(chromium-mobile)。6-3レビューのフルE2E 3回すべてで1件失敗
+- 問題内容:
+  想定した動き: 詳細シートの閉じるボタン等が押せる
+  実際の動き: クリックが絞り込み欄の <ul class="flex flex-wrap gap-x-3 gap-y-1 pointer-events-auto"> に奪われ
+              30秒でタイムアウト(detail-sheet-close 等。6-1d時点のコードでも同条件で4/5再現=6-3の変更が原因ではない)
+- 再現手順: npx playwright test e2e/admin-import-review.spec.ts --repeat-each=5 --project=chromium-mobile
+- 原因調査(途中): PerformerFilter/TagFilter は z-[60]、DetailSheet は z-50。モバイルで絞り込み欄の選択肢が
+  増えて高さが伸びると、詳細シート上部(閉じるボタン等)に重なる可能性(未検証)。このテストは実行中に
+  出演者を新規登録するため選択肢が増える。レビューでは review-unresolved-register(管理画面)で失敗した回もあり、
+  その経路は未解明。実利用者でも、メイン以外の出演者やタグが増えるとスマホで詳細シートを閉じられない可能性がある
+- 特定した原因: (未特定)
+- 切り出したタスク: progress.txt タスク6-3a
+

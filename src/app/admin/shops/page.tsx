@@ -39,6 +39,14 @@
  * URLのみ許可、空欄可)、不正な場合はvalidateShopFormの他のエラーと合わせて表示する。
  * AI抽出では扱わないためAI取り込みには追加しない(ReviewShopCardには別途タスク6-2で
  * 同じバリデーション関数を使った入力欄を用意する)。
+ *
+ * Google Place ID(タスク6-3・P-021): shops.googlePlaceId(任意)の作成・編集フォーム。
+ * src/lib/validation.tsのvalidatePlaceIdで検証し(英数字・ハイフン・アンダースコアのみ
+ * 許可、空欄可)、不正な場合はvalidateShopFormの他のエラーと合わせて表示する。入力欄の
+ * 近くにGoogle公式のPlace ID Finder(src/lib/google-maps.tsのPLACE_ID_FINDER_URL)への
+ * 「Place IDの調べ方」リンク(新しいタブ)を表示する。AI抽出では扱わないためAI取り込みには
+ * 追加しない(ReviewShopCardには別途タスク6-3で同じバリデーション関数を使った入力欄を
+ * 用意する)。承認処理(レビュー画面のhandleApprove)はgooglePlaceIdを書き換えない。
  */
 import { Timestamp } from "firebase/firestore";
 import dynamic from "next/dynamic";
@@ -56,8 +64,9 @@ import type { Shop } from "@/types/shop";
 import type { Tag } from "@/types/tag";
 import type { GeoLocation, PublishStatus } from "@/types/common";
 import { DEFAULT_MAP_CENTER } from "@/lib/map-config";
+import { PLACE_ID_FINDER_URL } from "@/lib/google-maps";
 import { useTransientMessage } from "@/lib/use-transient-message";
-import { validateInstagramUrl, type ValidationResult } from "@/lib/validation";
+import { validateInstagramUrl, validatePlaceId, type ValidationResult } from "@/lib/validation";
 
 // MapLibreはwindow/documentに依存するため、SSRでは描画せずクライアントでのみマウントする
 const ShopLocationPicker = dynamic(
@@ -87,6 +96,8 @@ interface ShopFormState {
   tagIds: string[];
   /** タスク6-2・P-020: 店舗のInstagram URL(任意、空欄可) */
   instagramUrl: string;
+  /** タスク6-3・P-021: 店舗のGoogle Place ID(任意、空欄可) */
+  googlePlaceId: string;
 }
 
 /** フォーム入力値のうちバリデーション・変換を通過した後の値(status/tagIdsは含まない) */
@@ -98,6 +109,7 @@ interface ParsedShopForm {
   location: GeoLocation;
   closed: boolean;
   instagramUrl: string;
+  googlePlaceId: string;
 }
 
 const EMPTY_FORM: ShopFormState = {
@@ -110,6 +122,7 @@ const EMPTY_FORM: ShopFormState = {
   lng: String(DEFAULT_MAP_CENTER.lng),
   tagIds: [],
   instagramUrl: "",
+  googlePlaceId: "",
 };
 
 function errorMessage(error: unknown): string {
@@ -169,13 +182,18 @@ function validateShopForm(form: ShopFormState): ValidationResult<ParsedShopForm>
   if (!instagramResult.ok) {
     errors.push(...instagramResult.errors);
   }
+  const placeIdResult = validatePlaceId(form.googlePlaceId);
+  if (!placeIdResult.ok) {
+    errors.push(...placeIdResult.errors);
+  }
 
   if (
     errors.length > 0 ||
     infoAsOf === null ||
     !Number.isFinite(lat) ||
     !Number.isFinite(lng) ||
-    !instagramResult.ok
+    !instagramResult.ok ||
+    !placeIdResult.ok
   ) {
     return { ok: false, errors };
   }
@@ -189,6 +207,7 @@ function validateShopForm(form: ShopFormState): ValidationResult<ParsedShopForm>
       location: { lat, lng },
       closed: form.closed,
       instagramUrl: instagramResult.data,
+      googlePlaceId: placeIdResult.data,
     },
   };
 }
@@ -353,6 +372,7 @@ export default function AdminShopsPage() {
       lng: String(shop.location.lng),
       tagIds: shop.tagIds ?? [],
       instagramUrl: shop.instagramUrl ?? "",
+      googlePlaceId: shop.googlePlaceId ?? "",
     });
     setEditErrors([]);
     setEditGeocodeError(null);
@@ -542,6 +562,27 @@ export default function AdminShopsPage() {
               className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
             />
           </label>
+          <label className="flex min-w-64 flex-1 flex-col gap-1 text-sm text-zinc-700 dark:text-zinc-200">
+            Google Place ID(任意)
+            <input
+              data-testid="shop-create-place-id"
+              type="text"
+              placeholder="英数字・ハイフン・アンダースコアのみ"
+              value={createForm.googlePlaceId}
+              onChange={(event) =>
+                setCreateForm({ ...createForm, googlePlaceId: event.target.value })
+              }
+              className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <a
+              href={PLACE_ID_FINDER_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+            >
+              Place IDの調べ方
+            </a>
+          </label>
         </div>
 
         <TagCheckboxList
@@ -730,6 +771,27 @@ export default function AdminShopsPage() {
                                 }
                                 className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
                               />
+                            </label>
+                            <label className="flex min-w-64 flex-1 flex-col gap-1 text-zinc-700 dark:text-zinc-200">
+                              Google Place ID(任意)
+                              <input
+                                data-testid="shop-edit-place-id"
+                                type="text"
+                                placeholder="英数字・ハイフン・アンダースコアのみ"
+                                value={editForm.googlePlaceId}
+                                onChange={(event) =>
+                                  setEditForm({ ...editForm, googlePlaceId: event.target.value })
+                                }
+                                className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
+                              />
+                              <a
+                                href={PLACE_ID_FINDER_URL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                              >
+                                Place IDの調べ方
+                              </a>
                             </label>
                           </div>
 

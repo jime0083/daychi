@@ -34,6 +34,12 @@
  * 「店舗情報を保存」ボタンを押した時にinstagramUrlもまとめて保存する。AI抽出では
  * 扱わないフィールドのため、承認処理(親ページのhandleApprove)は一切書き換えない
  * (tagIdsと同じ設計方針)。
+ *
+ * Google Place ID(タスク6-3・P-021、requirements.md 2026-09-25決定): 店舗管理画面と同じ
+ * src/lib/validation.tsのvalidatePlaceIdで検証するGoogle Place ID入力欄(+Place ID
+ * Finderへの案内リンク)を表示し、「店舗情報を保存」ボタンを押した時にgooglePlaceIdも
+ * まとめて保存する。AI抽出では扱わないフィールドのため、承認処理(親ページの
+ * handleApprove)は一切書き換えない(instagramUrl/tagIdsと同じ設計方針)。
  */
 import { Timestamp } from "firebase/firestore";
 import dynamic from "next/dynamic";
@@ -42,8 +48,9 @@ import { useState } from "react";
 import { TagCheckboxList } from "@/components/admin/TagCheckboxList";
 import { useAdminAuth } from "@/lib/admin-auth";
 import { geocodeAddress } from "@/lib/admin-geocode-client";
+import { PLACE_ID_FINDER_URL } from "@/lib/google-maps";
 import { updateShop } from "@/repositories/shops";
-import { validateInstagramUrl } from "@/lib/validation";
+import { validateInstagramUrl, validatePlaceId } from "@/lib/validation";
 import type { GeoLocation } from "@/types/common";
 import type { Shop } from "@/types/shop";
 import type { Tag } from "@/types/tag";
@@ -71,6 +78,8 @@ interface ShopInfoFormState {
   tagIds: string[];
   /** タスク6-2・P-020: 店舗のInstagram URL(任意、空欄可) */
   instagramUrl: string;
+  /** タスク6-3・P-021: 店舗のGoogle Place ID(任意、空欄可) */
+  googlePlaceId: string;
 }
 
 function errorMessage(error: unknown): string {
@@ -101,6 +110,7 @@ function toFormState(shop: Shop): ShopInfoFormState {
     infoAsOf: timestampToDateInputValue(shop.infoAsOf),
     tagIds: shop.tagIds ?? [],
     instagramUrl: shop.instagramUrl ?? "",
+    googlePlaceId: shop.googlePlaceId ?? "",
   };
 }
 
@@ -141,7 +151,16 @@ export function ReviewShopCard({ shop, allTags, onSaved }: ReviewShopCardProps) 
     if (!instagramResult.ok) {
       nextErrors.push(...instagramResult.errors);
     }
-    if (nextErrors.length > 0 || infoAsOf === null || !instagramResult.ok) {
+    const placeIdResult = validatePlaceId(form.googlePlaceId);
+    if (!placeIdResult.ok) {
+      nextErrors.push(...placeIdResult.errors);
+    }
+    if (
+      nextErrors.length > 0 ||
+      infoAsOf === null ||
+      !instagramResult.ok ||
+      !placeIdResult.ok
+    ) {
       setErrors(nextErrors);
       return;
     }
@@ -156,6 +175,7 @@ export function ReviewShopCard({ shop, allTags, onSaved }: ReviewShopCardProps) 
         infoAsOf,
         tagIds: form.tagIds,
         instagramUrl: instagramResult.data,
+        googlePlaceId: placeIdResult.data,
       });
       onSaved();
     } catch (error) {
@@ -273,6 +293,25 @@ export function ReviewShopCard({ shop, allTags, onSaved }: ReviewShopCardProps) 
             onChange={(event) => setForm({ ...form, instagramUrl: event.target.value })}
             className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
           />
+        </label>
+        <label className="flex min-w-64 flex-1 flex-col gap-1 text-sm text-zinc-700 dark:text-zinc-200">
+          Google Place ID(任意)
+          <input
+            data-testid="review-shop-place-id"
+            type="text"
+            placeholder="英数字・ハイフン・アンダースコアのみ"
+            value={form.googlePlaceId}
+            onChange={(event) => setForm({ ...form, googlePlaceId: event.target.value })}
+            className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          <a
+            href={PLACE_ID_FINDER_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          >
+            Place IDの調べ方
+          </a>
         </label>
         <button
           type="button"

@@ -5,7 +5,11 @@
 import { Timestamp } from "firebase/firestore";
 import { describe, expect, it } from "vitest";
 
-import { resolveShopVisitDetails } from "@/lib/shop-detail";
+import {
+  BUSINESS_HOURS_UNSET_MESSAGE,
+  formatBusinessHours,
+  resolveShopVisitDetails,
+} from "@/lib/shop-detail";
 import type { Video } from "@/types/video";
 import type { Visit } from "@/types/visit";
 
@@ -94,5 +98,19 @@ describe("resolveShopVisitDetails", () => {
 
   it("該当する訪問が無い場合は空配列を返す", () => {
     expect(resolveShopVisitDetails("shop-none", [], [])).toEqual([]);
+  });
+});
+
+describe("formatBusinessHours", () => {
+  it("営業時間が入力されている場合はそのまま返す", () => {
+    expect(formatBusinessHours("8:00-18:00(月曜定休)")).toBe("8:00-18:00(月曜定休)");
+  });
+
+  it("空文字の場合は案内文言を返す", () => {
+    expect(formatBusinessHours("")).toBe(BUSINESS_HOURS_UNSET_MESSAGE);
+  });
+
+  it("空白のみの場合も空欄として案内文言を返す", () => {
+    expect(formatBusinessHours("   ")).toBe(BUSINESS_HOURS_UNSET_MESSAGE);
   });
 });
