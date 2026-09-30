@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { skipFirstView } from "./support/first-view";
+
 /**
  * 公開トップページ(/)の地図表示とピン(タスク3-1)のE2Eテスト。
  *
@@ -20,6 +22,8 @@ import { expect, test } from "@playwright/test";
  */
 test.describe("公開トップページの地図表示(published店舗のピン)", () => {
   test("未認証で公開ページが表示され、published店舗のピンのみ表示される", async ({ page }) => {
+    // ファーストビュー(タスク7-2)はこのテストの検証対象外のためスキップする
+    await skipFirstView(page);
     await page.route("**/tiles.openfreemap.org/**", async (route) => {
       await route.abort();
     });

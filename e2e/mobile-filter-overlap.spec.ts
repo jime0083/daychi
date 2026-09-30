@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { uniqueTestId } from "@/repositories/test-support";
 
+import { skipFirstView } from "./support/first-view";
 import { clickMapPinWithZoom } from "./support/pin-click";
 import {
   createPerformersRaw,
@@ -59,6 +60,8 @@ test.describe("モバイルで絞り込み欄の選択肢が多い場合の操�
       await page.route("**/tiles.openfreemap.org/**", async (route) => {
         await route.abort();
       });
+      // ファーストビュー(タスク7-2)はこのテストの検証対象外のためスキップする
+      await skipFirstView(page);
       const response = await page.goto("/");
       expect(response?.ok()).toBe(true);
 

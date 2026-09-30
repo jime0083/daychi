@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { skipFirstView } from "./support/first-view";
 import { clickMapPinWithZoom } from "./support/pin-click";
 
 /**
@@ -57,6 +58,8 @@ async function blockMapTiles(page: Page): Promise<void> {
   await page.route("**/tiles.openfreemap.org/**", async (route) => {
     await route.abort();
   });
+  // ファーストビュー(タスク7-2)はこのテストの検証対象外のためスキップする
+  await skipFirstView(page);
 }
 
 /**

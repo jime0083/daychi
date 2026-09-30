@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { skipFirstView } from "./support/first-view";
+
 /**
  * スモークテスト(タスク1-6: Playwright E2E基盤)。
  *
@@ -7,9 +9,11 @@ import { expect, test } from "@playwright/test";
  * (npm run e2e)そのものが正しく機能することを確認する最小限のテスト。
  * トップページの具体的な内容(地図・店舗ピン等)はPhase 3で実装されるため、
  * ここでは「ページが正常に表示されること」のみを検証する。
+ * ファーストビュー(タスク7-2)はこのテストの検証対象外のためスキップする。
  */
 test.describe("E2E基盤の疎通確認", () => {
   test("トップページが表示される", async ({ page }) => {
+    await skipFirstView(page);
     const response = await page.goto("/");
 
     expect(response?.ok()).toBe(true);

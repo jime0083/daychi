@@ -5,6 +5,7 @@ import { uniqueTestId } from "@/repositories/test-support";
 
 import { createEmulatorTestUser } from "./support/emulator-auth";
 import { getShopRawFieldsByName } from "./support/firestore-raw";
+import { skipFirstView } from "./support/first-view";
 import { mockGeocode } from "./support/geocode-mock";
 import { useAdminViewport, usePublicViewport } from "./support/viewport";
 
@@ -53,6 +54,8 @@ async function blockMapTiles(page: Page): Promise<void> {
   await page.route("**/tiles.openfreemap.org/**", async (route) => {
     await route.abort();
   });
+  // ファーストビュー(タスク7-2)はこのテストの検証対象外のためスキップする
+  await skipFirstView(page);
 }
 
 async function loginAsAdmin(page: Page, emailPrefix: string): Promise<void> {

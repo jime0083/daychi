@@ -8,6 +8,7 @@ import { uniqueTestId } from "@/repositories/test-support";
 import { FIRESTORE_EMULATOR_HOST, FIRESTORE_EMULATOR_PORT } from "@/lib/firebase-config";
 
 import { createEmulatorTestUser } from "./support/emulator-auth";
+import { skipFirstView } from "./support/first-view";
 import { mockGeocode } from "./support/geocode-mock";
 import { clickMapPinWithZoom } from "./support/pin-click";
 
@@ -49,6 +50,8 @@ async function blockMapTiles(page: Page): Promise<void> {
   await page.route("**/tiles.openfreemap.org/**", async (route) => {
     await route.abort();
   });
+  // ファーストビュー(タスク7-2)はこのテストの検証対象外のためスキップする
+  await skipFirstView(page);
 }
 
 async function loginAsAdmin(page: Page, emailPrefix: string): Promise<void> {

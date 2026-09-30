@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { uniqueTestId } from "@/repositories/test-support";
 
 import { createEmulatorTestUser } from "./support/emulator-auth";
+import { skipFirstView } from "./support/first-view";
 import { mockGeocode } from "./support/geocode-mock";
 import { useAdminViewport, usePublicViewport } from "./support/viewport";
 
@@ -211,6 +212,8 @@ test.describe("AI取り込み→レビュー→承認(タスク4-4)", () => {
 
     // 公開ページ: ピンと詳細シートに反映されていることを確認する
     await usePublicViewport(page, testInfo);
+    // ファーストビュー(タスク7-2)はこのテストの検証対象外のためスキップする
+    await skipFirstView(page);
     const publicResponse = await page.goto("/");
     expect(publicResponse?.ok()).toBe(true);
     const pin = page.locator(`[data-testid="map-pin"][aria-label="${shopName}"]`);

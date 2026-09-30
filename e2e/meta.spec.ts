@@ -1,12 +1,17 @@
 import { expect, test } from "@playwright/test";
 
+import { skipFirstView } from "./support/first-view";
+
 /**
  * メタ情報(タイトル/OGP/favicon)のE2E検証(タスク3-6)。
  *
  * トップページのHTML head に、サービス名・OGP・faviconが正しく出力されることを確認する。
+ * ファーストビュー(タスク7-2)はこのテストの検証対象外のためスキップする
+ * (skipFirstViewについてはe2e/support/first-view.tsのコメント参照)。
  */
 test.describe("メタ情報", () => {
   test("トップページにタイトル/OGP/faviconが設定されている", async ({ page }) => {
+    await skipFirstView(page);
     await page.goto("/");
 
     await expect(page).toHaveTitle(/DayChi COFFEE MAP/);

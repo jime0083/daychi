@@ -118,10 +118,19 @@
  *   自動クローズと同じ考え方)。
  * - デスクトップ(VideoSidebar)・モバイル(MobileVideoList、地図タブへの自動切り替え後)の
  *   どちらもhandleVideoClickを共用するため、この動作は両方に同時に反映される。
+ *
+ * タスク7-2で追加したファーストビュー:
+ * - src/components/brand/FirstView.tsx を常に(初回か否かに関わらず)マウントする。
+ *   FirstView自身がsessionStorageで初回かどうかを判定し、初回でなければ何もレンダリング
+ *   しない(詳細はFirstView.tsxのコメント参照)。地図・サイドバー等の本体は下記の通り
+ *   常にマウントしたままなので、ファーストビュー表示中も裏側で読み込みが進む
+ *   (requirements.md「ファーストビュー表示中も地図画面はその裏で読み込んでおき、
+ *   切り替え後すぐ使えるようにする」に対応)。
  */
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { FirstView } from "@/components/brand/FirstView";
 import { DetailSheet } from "@/components/map/DetailSheet";
 import { MobileTabBar, type MobileTab } from "@/components/map/MobileTabBar";
 import { MobileVideoList } from "@/components/map/MobileVideoList";
@@ -404,6 +413,7 @@ export default function Home() {
         filterBarHeightPx={filterBarHeightPx}
         onClose={closeDetailSheet}
       />
+      <FirstView />
     </main>
   );
 }
