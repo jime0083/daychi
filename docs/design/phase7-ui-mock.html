@@ -1,0 +1,235 @@
+<title>DayChi COFFEE MAP デザイン見本</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oleo+Script:wght@700&family=Vollkorn:wght@700;900&family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+  :root {
+    --blue: #006593;
+    --blue-deep: #004E73;
+    --green: #007D00;
+    --green-deep: #005E00;
+    --yellow: #FFCA3A;
+    --paper: #FBF5E6;
+    --paper-2: #F3EAD2;
+    --ink: #1D2A22;
+    --ink-soft: #55615A;
+    --line: #E2D6B6;
+    --ground: #EDE7D6;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", sans-serif; padding-inline: 16px; padding-block: 28px 56px; }
+  .page { max-width: 1240px; margin: 0 auto; display: grid; gap: 28px; }
+  .intro { display: grid; gap: 10px; }
+  .intro h1 { margin: 0; font-size: 1.45rem; color: var(--blue); text-wrap: balance; }
+  .intro p { margin: 0; color: var(--ink-soft); line-height: 1.75; max-width: 70ch; }
+  .tokens { display: flex; flex-wrap: wrap; gap: 10px; }
+  .tok { display: flex; align-items: center; gap: 8px; background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px 4px 4px; font-size: .8rem; }
+  .tok i { width: 22px; height: 22px; border-radius: 50%; display: inline-block; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.1); }
+  .tok b { font-variant-numeric: tabular-nums; }
+  .label { font-size: .78rem; letter-spacing: .08em; color: var(--blue); font-weight: 700; }
+
+  /* ---- 共通パーツ ---- */
+
+  .wm { position: relative; display: inline-block; width: 3.14em; height: 1.24em; margin: .12em .18em .14em; }
+  .wm .ly { position: absolute; inset: 0; }
+  .wm .big { position: absolute; left: 0; top: 0; font-family: "Oleo Script", cursive; font-weight: 700; font-size: 1em; line-height: 1; white-space: nowrap; }
+  .wm .sm { position: absolute; top: 2.53em; font-family: "Vollkorn", serif; font-weight: 900; font-size: .34em; line-height: 1; letter-spacing: -0.01em; white-space: nowrap; }
+  .wm .cof { left: -0.51em; }
+  .wm .mp { left: 5.74em; }
+  .wm .st { color: #FFCC3A; }
+  .wm .st .big { -webkit-text-stroke: .19em #FFCC3A; }
+  .wm .st .sm { -webkit-text-stroke: .5em #FFCC3A; }
+  .wm .fi { color: #007D00; }
+  .map {
+    position: relative; overflow: hidden;
+    background:
+      radial-gradient(circle at 30% 40%, rgba(0,101,147,.10) 0 18%, transparent 19%),
+      linear-gradient(115deg, transparent 47%, #fff 47% 49.5%, transparent 49.5%),
+      linear-gradient(20deg, transparent 60%, #fff 60% 61.6%, transparent 61.6%),
+      linear-gradient(160deg, transparent 30%, #fff 30% 31.2%, transparent 31.2%),
+      repeating-linear-gradient(0deg, transparent 0 46px, rgba(255,255,255,.55) 46px 48px),
+      repeating-linear-gradient(90deg, transparent 0 58px, rgba(255,255,255,.55) 58px 60px),
+      #E9E4D3;
+  }
+  .river { position: absolute; left: -10%; right: -10%; top: 62%; height: 26px; background: #BFD9E4; transform: rotate(-8deg); border-radius: 20px; }
+  .pin { position: absolute; width: 34px; height: 44px; transform: translate(-50%, -100%); }
+  .pin svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 3px 0 rgba(0,78,115,.35)); }
+  .pin.dim { opacity: .9; }
+  .pin.hot svg { transform: scale(1.18); transform-origin: 50% 100%; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: .78rem; font-weight: 700; border-radius: 999px; padding: 5px 12px; border: 2px solid var(--green); color: var(--green); background: var(--paper); white-space: nowrap; }
+  .chip.on { background: var(--green); color: #fff; box-shadow: 0 2px 0 var(--green-deep); }
+  .filterbar { display: grid; gap: 6px; padding: 10px 14px; background: rgba(251,245,230,.94); border-bottom: 2px solid var(--line); }
+  .filterbar .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .filterbar .k { font-family: "Vollkorn", serif; font-weight: 900; font-size: .78rem; color: var(--blue); letter-spacing: .06em; min-width: 4.5em; }
+
+  .vcard { display: grid; grid-template-columns: 96px 1fr; gap: 10px; align-items: start; padding: 10px; border-radius: 12px; color: #fff; }
+  .vcard .thumb { aspect-ratio: 16/9; border-radius: 8px; background: linear-gradient(135deg, #7a5a3a, #3b2a1c); position: relative; overflow: hidden; }
+  .vcard .thumb::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 70% 30%, rgba(255,202,58,.45), transparent 55%); }
+  .vcard .t { font-size: .82rem; font-weight: 700; line-height: 1.45; }
+  .vcard .d { font-size: .72rem; opacity: .75; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .vcard.on { background: var(--paper); color: var(--ink); box-shadow: 0 0 0 3px var(--yellow), 0 4px 0 3px var(--blue-deep); }
+  .vcard.on .d { color: var(--ink-soft); opacity: 1; }
+
+  .sheet { background: var(--paper); border-radius: 22px 22px 0 0; box-shadow: 0 -6px 0 var(--yellow), 0 -10px 30px rgba(0,0,0,.18); padding: 12px 18px 18px; display: grid; gap: 12px; }
+  .grab { width: 44px; height: 5px; border-radius: 99px; background: var(--line); justify-self: center; }
+  .sheet .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .sheet h3 { margin: 0; font-family: "Vollkorn", serif; font-weight: 900; font-size: 1.6rem; color: var(--green); line-height: 1.1; }
+  .tagrow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .tag { font-size: .72rem; font-weight: 700; background: var(--yellow); color: var(--ink); border-radius: 6px; padding: 2px 8px; }
+  .close { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--green); color: var(--green); background: #fff; font-size: 1.1rem; font-weight: 900; display: grid; place-items: center; }
+  .visit { display: grid; grid-template-columns: 150px 1fr; gap: 12px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px; }
+  .visit .thumb { aspect-ratio: 16/9; border-radius: 10px; background: linear-gradient(135deg, #8a6a46, #3e2c1e); position: relative; }
+  .visit .thumb .play { position: absolute; inset: 0; margin: auto; width: 36px; height: 26px; border-radius: 8px; background: #fff; opacity: .92; }
+  .visit .thumb .play::after { content: ""; position: absolute; left: 14px; top: 7px; border-left: 11px solid var(--green); border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+  .who { display: grid; gap: 6px; }
+  .who .p { display: grid; grid-template-columns: 5.5em 1fr; gap: 8px; font-size: .82rem; line-height: 1.5; }
+  .who .p b { color: var(--blue); }
+  .date { font-size: .75rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .info { display: grid; gap: 4px; font-size: .84rem; line-height: 1.6; border-top: 2px dashed var(--line); padding-top: 10px; }
+  .info .k { color: var(--ink-soft); display: inline-block; min-width: 4.5em; }
+  .asof { font-size: .72rem; color: var(--ink-soft); }
+  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; font-weight: 900; font-size: .85rem; border-radius: 999px; padding: 9px 16px; background: var(--green); color: #fff; box-shadow: 0 3px 0 var(--green-deep); text-decoration: none; }
+  .ig { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: #fff; border: 2px solid var(--blue); color: var(--blue); }
+
+  /* ---- PC フレーム ---- */
+  .frame { border-radius: 16px; overflow: hidden; box-shadow: 0 1px 0 rgba(0,0,0,.05), 0 18px 40px rgba(0,50,80,.18); background: var(--paper); }
+  .pc { display: grid; grid-template-columns: 290px 1fr; height: 640px; }
+  .side { background: var(--blue); color: #fff; display: grid; grid-template-rows: auto auto 1fr; min-height: 0;
+          background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1.2px); background-size: 10px 10px; }
+  .side .brand { padding: 20px 18px 14px; border-bottom: 2px solid rgba(255,255,255,.14); }
+  .side .brand .wm { font-size: 3.6rem; }
+  .side h2 { margin: 0; padding: 14px 18px 6px; font-family: "Vollkorn", serif; font-weight: 900; font-size: .8rem; letter-spacing: .12em; color: var(--yellow); }
+  .side .list { display: grid; gap: 6px; padding: 4px 10px 14px; align-content: start; overflow: hidden; }
+  .main { display: grid; grid-template-rows: auto 1fr; min-width: 0; position: relative; }
+  .main .map { min-height: 0; }
+  .main .sheet { position: absolute; left: 0; right: 0; bottom: 0; }
+
+  /* ---- モバイル フレーム ---- */
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 28px; align-items: start; }
+  .phone { width: 100%; max-width: 360px; border-radius: 34px; border: 10px solid #1d2a22; overflow: hidden; background: var(--paper); height: 720px; display: grid; grid-template-rows: auto auto 1fr auto; position: relative; }
+  .mhead { background: var(--blue); padding: 12px 16px; display: flex; align-items: center; justify-content: center; }
+  .mhead .wm { font-size: 2.3rem; }
+  .phone .map { min-height: 0; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--blue); }
+  .tabs span { text-align: center; padding: 10px 0 14px; color: rgba(255,255,255,.75); font-weight: 700; font-size: .85rem; }
+  .tabs span.on { color: #fff; box-shadow: inset 0 4px 0 var(--yellow); }
+  .phone .sheet { position: absolute; left: 0; right: 0; bottom: 49px; }
+  .phone .visit { grid-template-columns: 1fr; }
+
+  /* ---- ファーストビュー ---- */
+  .splash { height: 360px; background: #DADADA; display: grid; place-items: center; position: relative; }
+  .splash .wm { font-size: clamp(4rem, 14vw, 8.5rem); }
+  .splash .hint { position: absolute; bottom: 16px; font-size: .78rem; color: #6b6b6b; }
+
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px; }
+  .note { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 6px; }
+  .note h3 { margin: 0; font-size: .95rem; color: var(--green); }
+  .note p { margin: 0; font-size: .84rem; line-height: 1.7; color: var(--ink-soft); }
+
+  @media (max-width: 1000px) { .row2 { grid-template-columns: 1fr; } .pc { grid-template-columns: 220px 1fr; } .phone { margin: 0 auto; } }
+  @media (max-width: 720px) { .pc { grid-template-columns: 1fr; height: auto; } .side { display: none; } .main .sheet { position: static; } .main .map { height: 300px; } .visit { grid-template-columns: 1fr; } }
+</style>
+
+<div class="page">
+  <header class="intro">
+    <span class="label">PHASE 7 デザイン見本(実装前の確認用)</span>
+    <h1>DayChi COFFEE MAP 公開ページのデザイン見本</h1>
+    <p>参考画像(DayChi COFFEE CHANNEL のロゴ)の「青地に、黄色で縁取った緑の文字」というレトロな世界観を、画面全体に広げた案です。青は画面の枠(サイドバー・ヘッダー・タブ)、緑は見出し・ボタン・選択中、黄は地図のピン・強調・縁取りに使います。本文は読みやすさのため、クリーム色の紙のような地に濃い色の文字にしています。</p>
+    <div class="tokens">
+      <span class="tok"><i style="background:#006593"></i>青 <b>#006593</b> 枠・面</span>
+      <span class="tok"><i style="background:#007D00"></i>緑 <b>#007D00</b> 見出し・ボタン・選択</span>
+      <span class="tok"><i style="background:#FFCA3A"></i>黄 <b>#FFCA3A</b> ピン・強調・縁取り</span>
+      <span class="tok"><i style="background:#FBF5E6"></i>クリーム <b>#FBF5E6</b> 本文の地</span>
+      <span class="tok"><i style="background:#1D2A22"></i>墨 <b>#1D2A22</b> 本文の文字</span>
+    </div>
+  </header>
+
+  <section style="display:grid;gap:10px">
+    <span class="label">1. ファーストビュー(決定済み・約3秒で地図へ)</span>
+    <div class="frame splash">
+      <span class="wm" role="img" aria-label="DayChi COFFEE MAP"><span class="ly st"><span class="big">DayChi</span><span class="sm cof">COFFEE</span><span class="sm mp">MAP</span></span><span class="ly fi"><span class="big">DayChi</span><span class="sm cof">COFFEE</span><span class="sm mp">MAP</span></span></span>
+      <span class="hint">タップでスキップ</span>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:10px">
+    <span class="label">2. PC 表示(動画をクリックして詳細シートを開いた状態)</span>
+    <div class="frame pc">
+      <aside class="side">
+        <div class="brand"><span class="wm" role="img" aria-label="DayChi COFFEE MAP"><span class="ly st"><span class="big">DayChi</span><span class="sm cof">COFFEE</span><span class="sm mp">MAP</span></span><span class="ly fi"><span class="big">DayChi</span><span class="sm cof">COFFEE</span><span class="sm mp">MAP</span></span></span></div>
+        <h2>VIDEOS 紹介した動画</h2>
+        <div class="list">
+          <div class="vcard on"><div class="thumb"></div><div><div class="t">かみちぃイチオシカフェ、綺麗な味わいの浅煎りコーヒーが飲める「arvo coffee」さんに行く</div><div class="d">2026.07.19</div></div></div>
+          <div class="vcard"><div class="thumb"></div><div><div class="t">「筋金珈琲焙煎所」さんでこだわり詰まった至高の深煎り珈琲を堪能!</div><div class="d">2026.07.25</div></div></div>
+        </div>
+      </aside>
+      <div class="main">
+        <div class="filterbar">
+          <div class="row"><span class="k">TAGS</span><div class="chips"><span class="chip">東京</span><span class="chip">浅煎り</span><span class="chip">深煎り</span></div></div>
+        </div>
+        <div class="map">
+          <div class="river"></div>
+          <div class="pin hot" style="left:44%;top:40%"><svg viewBox="0 0 34 44" aria-hidden="true"><path d="M17 42C17 42 3 26 3 16a14 14 0 1 1 28 0c0 10-14 26-14 26z" fill="#FFCA3A" stroke="#007D00" stroke-width="3"/><circle cx="17" cy="16" r="6" fill="#007D00"/></svg></div>
+          <div class="pin dim" style="left:36%;top:30%"><svg viewBox="0 0 34 44" aria-hidden="true"><path d="M17 42C17 42 3 26 3 16a14 14 0 1 1 28 0c0 10-14 26-14 26z" fill="#FFCA3A" stroke="#006593" stroke-width="3"/><circle cx="17" cy="16" r="6" fill="#006593"/></svg></div>
+          <div class="sheet">
+            <div class="grab"></div>
+            <div class="top">
+              <div><h3>arvo coffee</h3><div class="tagrow"><span class="tag">浅煎り</span></div></div>
+              <span class="close" aria-hidden="true">×</span>
+            </div>
+            <div class="visit">
+              <div class="thumb"><span class="play"></span></div>
+              <div class="who">
+                <div class="date">動画公開日 2026年7月19日</div>
+                <div class="p"><b>かみちぃさん</b><span>マジック / O(オー)/ 抹茶のガトーショコラ</span></div>
+                <div class="p"><b>出井さん</b><span>コロンビアゲイシャ / アーヴォカドトースト</span></div>
+              </div>
+            </div>
+            <div class="info">
+              <div><span class="k">住所</span>東京都世田谷区代沢2-42-10</div>
+              <div><span class="k">営業時間</span>Googleマップでご確認ください</div>
+              <div class="asof">※2026年9月23日現在</div>
+            </div>
+            <div class="actions">
+              <span class="ig" aria-label="Instagram"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="4"/><path d="M8 6l1.5-2h5L16 6"/></svg></span>
+              <a class="btn" href="#">Googleマップで開く</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="row2">
+    <div class="notes">
+      <div class="note"><h3>書体</h3><p>ロゴは決定済みの Oleo Script と Vollkorn。見出しや店名にも Vollkorn(Black)を使い、ロゴと同じ雰囲気をそろえます。本文の日本語は、丸みのある Zen Maru Gothic で柔らかくします。</p></div>
+      <div class="note"><h3>レトロな印刷物の質感</h3><p>青い面には小さな網点(ドット)を薄く重ね、選択中の動画や詳細シートには黄色の縁取りと、少しずらした影を付けます。ロゴの「黄色い縁取り」を画面の部品にも広げたものです。</p></div>
+      <div class="note"><h3>地図のピン</h3><p>ピンは黄色で、選んだ店舗は緑の縁取りで少し大きく、それ以外は青の縁取りにします。地図の色は変えません(OpenFreeMap のまま)。</p></div>
+      <div class="note"><h3>変えないもの</h3><p>画面の構成と動き(動画クリックで詳細シート、絞り込み、スマホのタブ)はこれまでどおりです。見た目だけを変えます。</p></div>
+    </div>
+    <div style="display:grid;gap:10px;justify-items:center">
+      <span class="label" style="justify-self:start">3. スマホ表示(詳細シートを開いた状態)</span>
+      <div class="phone">
+        <div class="mhead"><span class="wm" role="img" aria-label="DayChi COFFEE MAP"><span class="ly st"><span class="big">DayChi</span><span class="sm cof">COFFEE</span><span class="sm mp">MAP</span></span><span class="ly fi"><span class="big">DayChi</span><span class="sm cof">COFFEE</span><span class="sm mp">MAP</span></span></span></div>
+        <div class="filterbar"><div class="chips"><span class="chip">東京</span><span class="chip">浅煎り</span></div></div>
+        <div class="map">
+          <div class="river"></div>
+          <div class="pin hot" style="left:50%;top:32%"><svg viewBox="0 0 34 44" aria-hidden="true"><path d="M17 42C17 42 3 26 3 16a14 14 0 1 1 28 0c0 10-14 26-14 26z" fill="#FFCA3A" stroke="#007D00" stroke-width="3"/><circle cx="17" cy="16" r="6" fill="#007D00"/></svg></div>
+        </div>
+        <div class="tabs"><span class="on">地図</span><span>動画一覧</span></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div class="top"><div><h3>筋金珈琲焙煎所</h3><div class="tagrow"><span class="tag">東京</span></div></div><span class="close" aria-hidden="true">×</span></div>
+          <div class="info">
+            <div><span class="k">住所</span>東京都世田谷区北沢3-31-3</div>
+            <div><span class="k">営業時間</span>10:00~21:00(月曜定休)</div>
+          </div>
+          <div class="actions"><a class="btn" href="#">Googleマップで開く</a></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
