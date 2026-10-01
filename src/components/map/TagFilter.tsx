@@ -21,6 +21,11 @@
  *   経緯上、タグ未登録の状態でも公開ページが壊れないようにするための対応でもある)
  * - データ取得・絞り込み計算は行わない制御コンポーネント(PerformerFilterと同じ方針)。
  *   選択状態(selectedTagIds)とトグルコールバックは呼び出し側(src/app/page.tsx)が管理する
+ *
+ * タスク7-3(公開ページのデザイン刷新)での見た目変更:
+ * - PerformerFilter.tsxと全く同じ見た目(見本の`.filterbar`のクリーム地+Vollkornラベル+
+ *   緑のピル型選択肢)にする。チェックボックスを非表示にしない理由もPerformerFilter.tsxの
+ *   コメント「タスク7-3」を参照(Playwrightのcheck()/uncheck()との整合性)。
  */
 import type { Tag } from "@/types/tag";
 
@@ -51,12 +56,12 @@ export function TagFilter({ tags, selectedTagIds, onToggleTag }: TagFilterProps)
       // pointer-events-none: バー自体(背景・パディング・見出しテキスト)はクリックを
       // 透過させる(PerformerFilter.tsxの「レイアウト・重なり回避」コメント参照)。
       // 実際に操作が必要なulにのみ pointer-events-auto で復元する
-      className="relative z-[60] flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-zinc-200 bg-white/95 px-4 py-2 text-sm pointer-events-none dark:border-zinc-800 dark:bg-zinc-950/95"
+      className="relative z-[60] flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-brand-line bg-brand-paper/95 px-4 py-2 text-sm pointer-events-none"
     >
-      <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+      <span className="font-brand-display text-xs font-black tracking-wide text-brand-blue">
         タグで絞り込み
       </span>
-      <ul className="flex flex-wrap gap-x-3 gap-y-1 pointer-events-auto">
+      <ul className="flex flex-wrap gap-x-2 gap-y-1.5 pointer-events-auto">
         {sortedTags.map((tag) => {
           const isSelected = selectedTagIds.includes(tag.id);
           return (
@@ -65,13 +70,17 @@ export function TagFilter({ tags, selectedTagIds, onToggleTag }: TagFilterProps)
                 data-testid={TAG_FILTER_OPTION_TEST_ID}
                 data-tag-id={tag.id}
                 data-selected={isSelected ? "true" : "false"}
-                className="flex cursor-pointer items-center gap-1.5 text-zinc-700 dark:text-zinc-300"
+                className={`flex cursor-pointer items-center gap-1.5 rounded-full border-2 border-brand-green px-3 py-1 text-sm font-bold transition-colors ${
+                  isSelected
+                    ? "bg-brand-green text-white shadow-[0_2px_0_var(--brand-green-deep)]"
+                    : "bg-brand-paper text-brand-green"
+                }`}
               >
                 <input
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => onToggleTag(tag.id)}
-                  className="h-4 w-4"
+                  className="h-3.5 w-3.5 accent-brand-green"
                 />
                 {tag.name}
               </label>

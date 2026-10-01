@@ -37,3 +37,123 @@ body {
 html[data-first-view="seen"] [data-testid="first-view"] {
   display: none;
 }
+
+/*
+ * 公開ページ(/)のデザイン刷新(タスク7-3)で使う配色トークン。
+ * ユーザー承認済みの見本 docs/design/phase7-ui-mock.html の `:root` の値をそのまま使う
+ * (requirements.md 3.1.1のベース色: 青#006593・緑#007D00・黄#FFCA3A に、見本で追加された
+ * 濃色バリエーション・クリーム地・墨文字・線色を加えたもの)。
+ *
+ * 管理画面(/admin)は既存の配色(--background/--foreground、zinc系のTailwindユーティリティ)を
+ * そのまま使い続けるため、このブロックの変数・ユーティリティは公開ページのコンポーネント
+ * (src/app/page.tsx以下)のみが参照する。admin側のコンポーネントはこれらのクラスを使わない。
+ *
+ * @theme inline で bg-brand-blue 等のTailwindユーティリティ・font-brand-display/
+ * font-brand-body を生成する。マーカーSVG(src/components/map/PublicMap.tsx、
+ * MapLibreが生成する生DOM)やピン用のCSS(下記 .map-pin 系)は、Tailwindユーティリティを
+ * 使わずこのブロックのCSS変数を直接参照する(var(--brand-yellow)等)。
+ */
+:root {
+  --brand-blue: #006593;
+  --brand-blue-deep: #004e73;
+  --brand-green: #007d00;
+  --brand-green-deep: #005e00;
+  --brand-yellow: #ffca3a;
+  --brand-paper: #fbf5e6;
+  --brand-paper-2: #f3ead2;
+  --brand-ink: #1d2a22;
+  --brand-ink-soft: #55615a;
+  --brand-line: #e2d6b6;
+  --brand-ground: #ede7d6;
+}
+
+@theme inline {
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-blue-deep: var(--brand-blue-deep);
+  --color-brand-green: var(--brand-green);
+  --color-brand-green-deep: var(--brand-green-deep);
+  --color-brand-yellow: var(--brand-yellow);
+  --color-brand-paper: var(--brand-paper);
+  --color-brand-paper-2: var(--brand-paper-2);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-ink-soft: var(--brand-ink-soft);
+  --color-brand-line: var(--brand-line);
+  --color-brand-ground: var(--brand-ground);
+  /*
+   * 見出し・ラベル用(Vollkorn Black)。日本語(店名等)を含む場合は本文書体(Zen Maru Gothic)・
+   * システムの丸ゴシック・serifへ段階的にフォールバックする(Vollkornのファミリー自体には
+   * Google Fonts上にCJK向けの@font-faceが無く、日本語グリフを持たないため)。
+   */
+  --font-brand-display:
+    var(--font-vollkorn), "Zen Maru Gothic", "Hiragino Maru Gothic ProN", serif;
+  /*
+   * 本文(日本語)用(Zen Maru Gothic)。
+   * daychi-reviewでの検証結果: next/font/googleはGoogle Fonts CSSが定義する@font-face一式
+   * (CJKのunicode-rangeを含む、実測約370ルール)をすべて自前ホストする。ここで指定する
+   * `subsets`オプション(layout.tsxのzenMaruGothic呼び出し)はプリロード対象ファイルを
+   * 絞り込むだけで、実際に使える字形の範囲を制限するものではない。そのため日本語の本文は
+   * フォールバックではなくZen Maru Gothic自体の字形で描画される(CDPの
+   * CSS.getPlatformFontsForNodeで確認済み)。後続のフォールバック("Hiragino Maru Gothic
+   * ProN"・sans-serif、見本のfont-familyと同じ順)は、フォント読み込み前後の保険として残す。
+   */
+  --font-brand-body: var(--font-zen-maru-gothic), "Hiragino Maru Gothic ProN", sans-serif;
+}
+
+/*
+ * 公開ページの青い面(PCサイドバー・スマホのヘッダー・スマホのタブ)に重ねる薄い網点模様
+ * (見本の「レトロな印刷物の質感」)。装飾のみでコントラスト・操作性には影響しない。
+ */
+.brand-dot-pattern {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1.2px);
+  background-size: 10px 10px;
+}
+
+/*
+ * 公開ページの地図ピン(タスク7-3)。src/components/map/PublicMap.tsxがdata-testid="map-pin"の
+ * ルート要素にこのクラスを付与し、色・大きさの切り替えはdata-highlighted属性への
+ * CSS属性セレクタのみで行う(マーカー要素の再生成やstyle.filter書き換えを行わない)。
+ * ピンの当たり判定・anchor・MAP_FIT_BOUNDS_PADDING(src/lib/map-config.ts)は変更しないため、
+ * サイズ(34x44px)はMapLibreの既定ピン(27x41px)に近い値を採用している。
+ */
+.map-pin {
+  width: 34px;
+  height: 44px;
+  cursor: pointer;
+}
+
+.map-pin-inner {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 100%;
+  transition: transform 150ms ease-out;
+}
+
+.map-pin-inner svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 3px 0 rgba(0, 78, 115, 0.35));
+}
+
+.map-pin-shape {
+  fill: var(--brand-yellow);
+  stroke: var(--brand-blue);
+  stroke-width: 3;
+}
+
+.map-pin-dot {
+  fill: var(--brand-blue);
+}
+
+.map-pin[data-highlighted="true"] .map-pin-inner {
+  transform: scale(1.18);
+}
+
+.map-pin[data-highlighted="true"] .map-pin-shape {
+  stroke: var(--brand-green);
+}
+
+.map-pin[data-highlighted="true"] .map-pin-dot {
+  fill: var(--brand-green);
+}

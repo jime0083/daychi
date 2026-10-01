@@ -21,6 +21,14 @@
  *   (src/app/page.tsx)が公開日降順に並べ替え済みのvideos配列を渡す。
  * - 動画クリック時のタブ切り替え(「地図」タブへの遷移)は呼び出し側の責務とする
  *   (onVideoClickコールバック内でselectedVideoIdの更新とタブ切り替えの両方を行う)。
+ *
+ * タスク7-3(公開ページのデザイン刷新)での見た目変更:
+ * - 見本はモバイルの「動画一覧」タブの中身自体は示していないが、requirements.mdの
+ *   「デスクトップのVideoSidebarと同等」という設計方針に合わせ、VideoSidebar
+ *   (src/components/map/VideoSidebar.tsx)と同じ配色言語(青地+網点模様、見出し
+ *   「VIDEOS 紹介した動画」、選択中カードはクリーム+黄縁取り)で統一する。ロゴは
+ *   画面上部のMobileHeader(src/components/map/MobileHeader.tsx)が既に表示しているため
+ *   ここでは重複させない。DOM構造・data-testidは変更しない。
  */
 import { formatDateJa } from "@/lib/date-format";
 import { buildYoutubeThumbnailUrl } from "@/lib/youtube";
@@ -42,20 +50,17 @@ export function MobileVideoList({ videos, selectedVideoId, onVideoClick }: Mobil
   return (
     <div
       data-testid={MOBILE_VIDEO_LIST_TEST_ID}
-      className="flex h-full w-full flex-col overflow-y-auto bg-white dark:bg-zinc-950"
+      className="brand-dot-pattern flex h-full w-full flex-col overflow-y-auto bg-brand-blue text-white"
     >
-      <h2 className="border-b border-zinc-100 px-4 py-3 text-sm font-semibold text-zinc-900 dark:border-zinc-900 dark:text-zinc-50">
-        動画一覧
+      <h2 className="font-brand-display px-4 pt-4 pb-1.5 text-xs font-black tracking-[0.12em] text-brand-yellow">
+        VIDEOS 紹介した動画
       </h2>
       {videos.length === 0 ? (
-        <p
-          data-testid="mobile-video-list-empty"
-          className="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400"
-        >
+        <p data-testid="mobile-video-list-empty" className="px-4 py-3 text-sm text-white/80">
           公開済みの動画がありません。
         </p>
       ) : (
-        <ul className="flex flex-col">
+        <ul className="flex flex-col gap-1.5 px-2.5 pb-4">
           {videos.map((video) => {
             const isSelected = video.id === selectedVideoId;
             return (
@@ -66,8 +71,10 @@ export function MobileVideoList({ videos, selectedVideoId, onVideoClick }: Mobil
                   data-video-id={video.id}
                   data-selected={isSelected ? "true" : "false"}
                   onClick={() => onVideoClick(video.id)}
-                  className={`flex w-full items-start gap-3 border-b border-zinc-100 px-4 py-3 text-left transition-colors hover:bg-zinc-50 dark:border-zinc-900 dark:hover:bg-zinc-900 ${
-                    isSelected ? "bg-orange-50 dark:bg-orange-950" : ""
+                  className={`flex w-full items-start gap-2.5 rounded-xl p-2.5 text-left transition-colors ${
+                    isSelected
+                      ? "bg-brand-paper text-brand-ink shadow-[0_0_0_3px_var(--brand-yellow),0_4px_0_3px_var(--brand-blue-deep)]"
+                      : "text-white hover:bg-white/10"
                   }`}
                 >
                   {/* i.ytimg.com はnext.config.tsの画像許可ドメイン未整備のためimgを使用(VideoSidebar.tsxと同方針) */}
@@ -76,16 +83,15 @@ export function MobileVideoList({ videos, selectedVideoId, onVideoClick }: Mobil
                     data-testid="mobile-video-list-thumbnail"
                     src={buildYoutubeThumbnailUrl(video.id)}
                     alt={video.title}
-                    className="h-14 w-24 shrink-0 rounded object-cover"
+                    className="h-14 w-24 shrink-0 rounded-lg object-cover"
                   />
                   <div className="flex flex-1 flex-col gap-1">
-                    <span
-                      data-testid="mobile-video-list-title"
-                      className="text-sm font-medium text-zinc-900 dark:text-zinc-50"
-                    >
+                    <span data-testid="mobile-video-list-title" className="text-sm font-bold">
                       {video.title}
                     </span>
-                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    <span
+                      className={`text-xs tabular-nums ${isSelected ? "text-brand-ink-soft" : "text-white/75"}`}
+                    >
                       {formatDateJa(video.publishedAt)}
                     </span>
                   </div>

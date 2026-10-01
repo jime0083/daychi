@@ -75,6 +75,15 @@
  * 「min(80vh, 画面高さ - 絞り込み帯高さ)」に追加制限することで、絞り込み帯がどれだけ
  * 伸びてもこのシートの上端が絞り込み帯の下端より上に来ないようにする(内容が収まらない分は
  * 既存のoverflow-y-autoで内部スクロールする)。
+ *
+ * タスク7-3(公開ページのデザイン刷新)での見た目変更:
+ * - 見本(docs/design/phase7-ui-mock.html「.sheet」)のクリーム地・上端の黄色い帯(box-shadow)・
+ *   店名(Vollkorn Black・緑)・黄色い小札のタグ・緑の丸枠の閉じるボタン・点線区切りの
+ *   店舗情報欄・緑のGoogleマップボタンに合わせる。表示項目・順序・data-testid・
+ *   左オフセット(md:left-72)・最大高さ計算(filterBarHeightPx)は一切変更しない。
+ * - 閉じるボタンの見た目のみ「閉じる」の文字から「×」記号に変更する(aria-label="閉じる"は
+ *   維持するため、アクセシブルな名前は変わらない。E2Eはdata-testidのみで特定しているため
+ *   影響なし)。
  */
 import { CameraIcon } from "@/components/icons/CameraIcon";
 import type { Performer } from "@/types/performer";
@@ -149,58 +158,52 @@ export function DetailSheet({
         // こちらが効いてシートが短くなり、絞り込み帯と重ならなくなる
         // (DetailSheetPropsのコメント参照)
         style={{ maxHeight: `min(80vh, calc(100dvh - ${filterBarHeightPx}px))` }}
-        className={`fixed inset-x-0 bottom-0 z-50 overflow-y-auto rounded-t-2xl bg-white shadow-lg transition-transform duration-300 ease-out md:left-72 dark:bg-zinc-950 ${
+        className={`fixed inset-x-0 bottom-0 z-50 overflow-y-auto rounded-t-2xl bg-brand-paper text-brand-ink shadow-[0_-6px_0_var(--brand-yellow),0_-10px_30px_rgba(0,0,0,0.18)] transition-transform duration-300 ease-out md:left-72 ${
           isOpen ? "translate-y-0" : "pointer-events-none translate-y-full"
         }`}
       >
         {shop !== null && (
           <div className="flex flex-col gap-4 p-4 sm:p-6">
             <div className="flex items-start justify-between gap-4">
-              <h2
-                data-testid="detail-sheet-shop-name"
-                className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
-              >
-                {shop.name}
-              </h2>
+              <div>
+                <h2 data-testid="detail-sheet-shop-name" className="font-brand-display text-2xl font-black text-brand-green">
+                  {shop.name}
+                </h2>
+
+                {shopTags.length > 0 && (
+                  <ul data-testid="detail-sheet-tags" className="mt-1.5 flex flex-wrap gap-1.5">
+                    {shopTags.map((tag) => (
+                      <li
+                        key={tag.id}
+                        data-testid="detail-sheet-tag"
+                        className="rounded-md bg-brand-yellow px-2 py-0.5 text-xs font-bold text-brand-ink"
+                      >
+                        {tag.name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               <button
                 type="button"
                 data-testid="detail-sheet-close"
                 onClick={onClose}
                 aria-label="閉じる"
-                className="shrink-0 rounded-full border border-zinc-300 px-2.5 py-1 text-sm text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-brand-green bg-white text-lg font-black leading-none text-brand-green transition-colors hover:bg-brand-paper-2"
               >
-                閉じる
+                ×
               </button>
             </div>
 
-            {shopTags.length > 0 && (
-              <ul
-                data-testid="detail-sheet-tags"
-                className="flex flex-wrap gap-1.5 text-xs text-zinc-600 dark:text-zinc-400"
-              >
-                {shopTags.map((tag) => (
-                  <li
-                    key={tag.id}
-                    data-testid="detail-sheet-tag"
-                    className="rounded-full bg-zinc-100 px-2 py-0.5 dark:bg-zinc-900"
-                  >
-                    {tag.name}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <div data-testid="detail-sheet-visits" className="flex flex-col gap-4">
+            <div data-testid="detail-sheet-visits" className="flex flex-col gap-3">
               {visitDetails.length === 0 ? (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                  公開済みの紹介動画情報がありません。
-                </p>
+                <p className="text-sm text-brand-ink-soft">公開済みの紹介動画情報がありません。</p>
               ) : (
                 visitDetails.map(({ visit, video }) => (
                   <div
                     key={visit.id}
                     data-testid="detail-sheet-visit"
-                    className="flex flex-col gap-2 border-b border-zinc-100 pb-4 last:border-b-0 last:pb-0 dark:border-zinc-900 sm:flex-row sm:gap-4"
+                    className="flex flex-col gap-2 rounded-2xl border border-brand-line bg-white p-2.5 sm:flex-row sm:gap-3"
                   >
                     <a
                       data-testid="detail-sheet-video-link"
@@ -215,7 +218,7 @@ export function DetailSheet({
                         data-testid="detail-sheet-thumbnail"
                         src={buildYoutubeThumbnailUrl(video.id)}
                         alt={video.title}
-                        className="h-24 w-full rounded object-cover sm:w-40"
+                        className="h-24 w-full rounded-lg object-cover sm:w-40"
                       />
                     </a>
                     <div className="flex flex-1 flex-col gap-1">
@@ -224,26 +227,23 @@ export function DetailSheet({
                         href={buildYoutubeWatchUrl(video.id)}
                         target="_blank"
                         rel="noopener"
-                        className="text-sm font-medium text-zinc-900 hover:underline dark:text-zinc-50"
+                        className="text-sm font-bold text-brand-ink hover:underline"
                       >
                         {video.title}
                       </a>
-                      <p
-                        data-testid="detail-sheet-published-at"
-                        className="text-xs text-zinc-500 dark:text-zinc-400"
-                      >
+                      <p data-testid="detail-sheet-published-at" className="text-xs text-brand-ink-soft tabular-nums">
                         動画公開日: {formatDateJa(video.publishedAt)}
                       </p>
                       <ul
                         data-testid="detail-sheet-consumptions"
-                        className="flex flex-col gap-0.5 text-sm text-zinc-700 dark:text-zinc-300"
+                        className="flex flex-col gap-0.5 text-sm text-brand-ink"
                       >
                         {visit.consumptions.map((consumption, index) => (
                           <li
                             key={`${consumption.performerId}-${index}`}
                             data-testid="detail-sheet-consumption"
                           >
-                            <span className="font-medium">
+                            <span className="font-bold text-brand-blue">
                               {resolvePerformerName(performers, consumption.performerId)}
                             </span>
                             : {consumption.items.join("、")}
@@ -256,19 +256,19 @@ export function DetailSheet({
               )}
             </div>
 
-            <div className="flex flex-col gap-1 border-t border-zinc-100 pt-3 text-sm text-zinc-700 dark:border-zinc-900 dark:text-zinc-300">
+            <div className="flex flex-col gap-1 border-t-2 border-dashed border-brand-line pt-3 text-sm text-brand-ink">
               <p data-testid="detail-sheet-address">住所: {shop.address}</p>
               <p data-testid="detail-sheet-business-hours">
                 営業時間: {formatBusinessHours(shop.businessHours)}
               </p>
-              <p
-                data-testid="detail-sheet-info-as-of"
-                className="text-xs text-zinc-400 dark:text-zinc-500"
-              >
+              <p data-testid="detail-sheet-info-as-of" className="text-xs text-brand-ink-soft">
                 {formatInfoAsOf(shop.infoAsOf)}
               </p>
 
-              <div data-testid="detail-sheet-shop-actions" className="flex flex-wrap items-center gap-2 pt-1">
+              <div
+                data-testid="detail-sheet-shop-actions"
+                className="flex flex-wrap items-center gap-2.5 pt-1.5"
+              >
                 {hasInstagram && (
                   <a
                     data-testid="detail-sheet-instagram-link"
@@ -276,7 +276,7 @@ export function DetailSheet({
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Instagram"
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300 text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border-2 border-brand-blue text-brand-blue transition-colors hover:bg-white"
                   >
                     <CameraIcon className="h-5 w-5" />
                   </a>
@@ -286,7 +286,7 @@ export function DetailSheet({
                   href={googleMapsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex h-9 items-center justify-center rounded-full border border-zinc-300 px-3 text-sm text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                  className="inline-flex h-10 items-center justify-center rounded-full bg-brand-green px-4 text-sm font-bold text-white shadow-[0_3px_0_var(--brand-green-deep)] transition-colors hover:bg-brand-green-deep"
                 >
                   Googleマップで開く
                 </a>

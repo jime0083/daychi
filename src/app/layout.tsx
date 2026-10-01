@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Oleo_Script, Vollkorn } from "next/font/google";
+import { Geist, Geist_Mono, Oleo_Script, Vollkorn, Zen_Maru_Gothic } from "next/font/google";
 
 import { FIRST_VIEW_STORAGE_KEY } from "@/lib/first-view";
 
@@ -32,6 +32,20 @@ const oleoScript = Oleo_Script({
 const vollkorn = Vollkorn({
   variable: "--font-vollkorn",
   weight: "900",
+  subsets: ["latin"],
+});
+
+// 公開ページ(/)のデザイン刷新(タスク7-3)本文書体。requirements.md 3.1.1・
+// docs/design/phase7-ui-mock.html: 本文の日本語はZen Maru Gothic(Google Fonts、
+// next/font/google)。daychi-reviewでの検証(globals.cssの--font-brand-bodyのコメント参照):
+// next/font/googleはGoogle Fonts CSSが定義する@font-face一式(CJKのunicode-rangeを含む、
+// 実測約370ルール)をすべて自前ホストする。ここで指定する`subsets`オプションは
+// プリロード対象ファイルを絞り込むだけで、実際に使える字形(@font-face)の範囲を
+// 制限するものではない。そのため日本語の本文もフォールバック書体ではなく
+// Zen Maru Gothic自体の字形で描画される(CDPのCSS.getPlatformFontsForNodeで確認済み)。
+const zenMaruGothic = Zen_Maru_Gothic({
+  variable: "--font-zen-maru-gothic",
+  weight: ["500", "700", "900"],
   subsets: ["latin"],
 });
 
@@ -114,7 +128,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${oleoScript.variable} ${vollkorn.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${oleoScript.variable} ${vollkorn.variable} ${zenMaruGothic.variable} h-full antialiased`}
     >
       <head>
         {/* 意図的に同期実行させるブロッキングスクリプト(上記コメント参照)。next/scriptは使わない */}

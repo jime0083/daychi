@@ -48,11 +48,30 @@
  *   ハイライトの反映(DOM属性・見た目の更新)と地図フォーカス(flyTo/fitBounds)は、
  *   ピン生成・初期fitBoundsとは完全に別のeffectとして分離し、既存markerの要素を
  *   直接更新するだけに留める(マーカーの再生成・カメラの再フィットは行わない)。
- * - ハイライトの見た目: 通常ピンと視覚的に区別するため、要素のCSS filterを変更する
- *   (SVG内部のfill色を直接書き換えるより単純で、MapLibreが管理するtransform
- *   (位置決め)スタイルとは独立して指定できるため)。
+ * - ハイライトの見た目(タスク7-3で見本の色に変更): data-highlighted属性のみを
+ *   切り替え、実際の色・大きさの変化はglobals.cssの`.map-pin`系CSS(属性セレクタ)に
+ *   任せる。以前はCSS filter(hue-rotate)で色味を変えていたが、見本の配色
+ *   (通常=青の縁取り、ハイライト=緑の縁取り+少し拡大)を正確な色で再現するため、
+ *   ピンSVG自体を自前で描画しCSS変数(--brand-blue/--brand-green)で色を切り替える方式に
+ *   変更した(下記「ピンの見た目(タスク7-3)」参照)。マーカーの再生成やカメラ移動は
+ *   このコミット以前と変わらず行わない。
  * - 決定的なE2E検証のため、各Marker要素に data-highlighted="true"/"false" を
  *   必ず付与する(色の見た目に頼らずDOM属性で検証できるようにするため)。
+ *
+ * ピンの見た目(タスク7-3、公開ページのデザイン刷新):
+ * - 見本(docs/design/phase7-ui-mock.html)のピンSVG(黄色の水滴形、通常は青の縁取り、
+ *   ハイライトは緑の縁取り+拡大)をそのまま移植する。挙動(クリック判定・ハイライト対象の
+ *   算出・地図フォーカス)は一切変更しない。
+ * - maplibregl.Marker({ element })でルート要素を自前のdiv(buildPinElement()が生成)に
+ *   差し替える。以前(要素未指定時の既定ピン、幅27×高さ41px)と異なり、要素を指定した
+ *   Markerはoffsetの既定値が[0,0]になる(maplibregl-gl/src/ui/marker.tsの
+ *   コンストラクタ参照。既定ピン使用時のみ既定offsetが[0,-14]になる特別扱いがある)。
+ *   anchorは指定せず既定の"center"のまま(=以前と同じ)にすることで、座標点からの
+ *   はみ出し量は最大でも幅34×高さ44pxの半分(横±17px・縦±22px)に収まり、以前の既定ピン
+ *   (横±13.5px・縦は offset込みで最大34.5px上方向にはみ出す)より小さいか同程度になる。
+ *   そのためMAP_FIT_BOUNDS_PADDING(96px。problem.txt P-023参照)が確保する安全マージンは
+ *   このピンでも十分に効く(numbers上の詳細はdaychi-reviewへの報告参照)。
+ *   この前提を変えるため、anchor/offsetを独自指定することはしない。
  * - highlightedShopIdsが変化した際、対象の店舗が1件ならその店舗を中心にflyTo、
  *   複数件なら全店舗が収まるようfitBoundsする(該当店舗が複数動画で紹介されている
  *   ケースへの対応。「代表1店舗にフォーカス」ではなく「全店舗が収まるようフィット」を
@@ -66,7 +85,6 @@ import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   MAP_FIT_BOUNDS_PADDING,
-  MAP_PIN_HIGHLIGHT_FILTER,
   MAP_STYLE_URL,
 } from "@/lib/map-config";
 import { configureMapLibreWorker } from "@/lib/maplibre-worker";
@@ -74,6 +92,25 @@ import type { Shop } from "@/types/shop";
 
 /** ピンのMarker要素に付与するdata-testid(E2Eで page.getByTestId(MAP_PIN_TEST_ID) 等に使用) */
 export const MAP_PIN_TEST_ID = "map-pin";
+
+/**
+ * ピンのSVG(見本のpath。黄色の水滴形、中央に丸)。色はglobals.cssの`.map-pin-shape`/
+ * `.map-pin-dot`(data-highlighted属性のCSS属性セレクタ)が決めるため、ここでは
+ * fill/stroke等の色属性を持たない(色はCSS側の一元管理のまま)。
+ */
+function buildPinElement(): HTMLDivElement {
+  const element = document.createElement("div");
+  element.className = "map-pin";
+  element.innerHTML = `
+    <div class="map-pin-inner">
+      <svg viewBox="0 0 34 44" aria-hidden="true" focusable="false">
+        <path class="map-pin-shape" d="M17 42C17 42 3 26 3 16a14 14 0 1 1 28 0c0 10-14 26-14 26z" />
+        <circle class="map-pin-dot" cx="17" cy="16" r="6" />
+      </svg>
+    </div>
+  `;
+  return element;
+}
 
 interface PublicMapProps {
   /** 地図にピン表示する店舗一覧。取得中は空配列を渡すこと(0件フォールバック表示になる) */
@@ -89,13 +126,13 @@ interface PublicMapProps {
   highlightedShopIds?: string[];
 }
 
-/** マーカー要素にハイライト状態(data属性・見た目)を反映する */
+/** マーカー要素にハイライト状態(data属性)を反映する。見た目(色・大きさ)の変化は
+ * globals.cssの`.map-pin[data-highlighted="true"]`系のCSSがこの属性を見て行う */
 function applyHighlightState(marker: maplibregl.Marker, highlightedShopIds: string[]): void {
   const element = marker.getElement();
   const shopId = element.dataset.shopId;
   const isHighlighted = shopId !== undefined && highlightedShopIds.includes(shopId);
   element.dataset.highlighted = isHighlighted ? "true" : "false";
-  element.style.filter = isHighlighted ? MAP_PIN_HIGHLIGHT_FILTER : "";
 }
 
 export function PublicMap({
@@ -162,7 +199,7 @@ export function PublicMap({
     // Phase 3-1時点では初回ロード時にしか変化しないため、差分更新の複雑さは導入しない)
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = shops.map((shop) => {
-      const marker = new maplibregl.Marker()
+      const marker = new maplibregl.Marker({ element: buildPinElement() })
         .setLngLat([shop.location.lng, shop.location.lat])
         .addTo(map);
       const element = marker.getElement();

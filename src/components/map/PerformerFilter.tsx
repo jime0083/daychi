@@ -44,6 +44,16 @@
  *   (「フィルタで店舗が消えたら詳細シートを自動クローズ」というsrc/app/page.tsxの
  *   togglePerformerId実装に、通常のUI操作から到達できるようにするための対応。
  *   e2e/performer-filter.spec.tsで検証する)。
+ *
+ * タスク7-3(公開ページのデザイン刷新)での見た目変更:
+ * - 見本(docs/design/phase7-ui-mock.html「.filterbar」)のクリーム地+Vollkornの小さな
+ *   ラベル+ピル型の選択肢に合わせる。選択中は緑で塗りつぶす。
+ * - 実際の`<input type="checkbox">`は見本と異なり非表示にしない(Playwrightの
+ *   locator.check()/uncheck()(e2e/mobile-filter-overlap.spec.ts等)が要素の可視性を
+ *   前提とするため、force:trueなしで操作できる状態を保つ必要がある。CLAUDE.mdの
+ *   「force...は不可」の制約に合わせた意図的な見本との差異)。チェックボックス自体は
+ *   小さく・選択色(accent-color)を緑にして違和感を抑える。
+ * - レイアウト(帯・pointer-events・z-index)は上記の理由により一切変更しない。
  */
 import type { Performer } from "@/types/performer";
 
@@ -80,12 +90,12 @@ export function PerformerFilter({
       // pointer-events-none: バー自体(背景・パディング・見出しテキスト)はクリックを
       // 透過させる(上のコメント「レイアウト・重なり回避」参照)。実際に操作が必要な
       // ulにのみ pointer-events-auto で復元する
-      className="relative z-[60] flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-zinc-200 bg-white/95 px-4 py-2 text-sm pointer-events-none dark:border-zinc-800 dark:bg-zinc-950/95"
+      className="relative z-[60] flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-brand-line bg-brand-paper/95 px-4 py-2 text-sm pointer-events-none"
     >
-      <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+      <span className="font-brand-display text-xs font-black tracking-wide text-brand-blue">
         出演者で絞り込み
       </span>
-      <ul className="flex flex-wrap gap-x-3 gap-y-1 pointer-events-auto">
+      <ul className="flex flex-wrap gap-x-2 gap-y-1.5 pointer-events-auto">
         {filterablePerformers.map((performer) => {
           const isSelected = selectedPerformerIds.includes(performer.id);
           return (
@@ -94,13 +104,17 @@ export function PerformerFilter({
                 data-testid={PERFORMER_FILTER_OPTION_TEST_ID}
                 data-performer-id={performer.id}
                 data-selected={isSelected ? "true" : "false"}
-                className="flex cursor-pointer items-center gap-1.5 text-zinc-700 dark:text-zinc-300"
+                className={`flex cursor-pointer items-center gap-1.5 rounded-full border-2 border-brand-green px-3 py-1 text-sm font-bold transition-colors ${
+                  isSelected
+                    ? "bg-brand-green text-white shadow-[0_2px_0_var(--brand-green-deep)]"
+                    : "bg-brand-paper text-brand-green"
+                }`}
               >
                 <input
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => onTogglePerformer(performer.id)}
-                  className="h-4 w-4"
+                  className="h-3.5 w-3.5 accent-brand-green"
                 />
                 {performer.name}
               </label>

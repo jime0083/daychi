@@ -16,6 +16,11 @@
  *   制御コンポーネントとし、現在のタブ(activeTab)と切り替えコールバックのみを扱う。
  * - 各タブボタンには data-testid と data-active(選択中かどうか)を付与し、
  *   E2Eで見た目の色ではなくDOM属性で決定的にタブの選択状態を検証できるようにする。
+ *
+ * タスク7-3(公開ページのデザイン刷新)での見た目変更:
+ * - 見本(docs/design/phase7-ui-mock.html「3. スマホ表示」)のタブ(青地+網点模様、
+ *   選択中タブの上端に黄色の線)に合わせる。DOM構造・data-testid・data-active・
+ *   タブ切り替え挙動は変更しない。
  */
 
 /** 切り替え可能なモバイルタブの種類 */
@@ -36,18 +41,17 @@ interface MobileTabBarProps {
 }
 
 function tabButtonClassName(isActive: boolean): string {
-  const base =
-    "flex-1 py-3 text-center text-sm font-medium transition-colors border-t-2 dark:text-zinc-300";
+  const base = "flex-1 py-3 text-center text-sm font-bold transition-colors";
   return isActive
-    ? `${base} border-orange-500 text-orange-600 dark:text-orange-400`
-    : `${base} border-transparent text-zinc-500 dark:text-zinc-400`;
+    ? `${base} text-white shadow-[inset_0_4px_0_0_var(--brand-yellow)]`
+    : `${base} text-white/70`;
 }
 
 export function MobileTabBar({ activeTab, onSelectTab }: MobileTabBarProps) {
   return (
     <nav
       data-testid={MOBILE_TAB_BAR_TEST_ID}
-      className="flex shrink-0 border-t border-zinc-200 bg-white md:hidden dark:border-zinc-800 dark:bg-zinc-950"
+      className="flex shrink-0 bg-brand-blue md:hidden"
     >
       <button
         type="button"

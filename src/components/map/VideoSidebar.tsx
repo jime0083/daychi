@@ -34,7 +34,17 @@
  *   右にオフセットする対応に変更した。これによりPCではオーバーレイ・シートがこの
  *   サイドバーの領域と幾何学的に重ならなくなるため、このサイドバー自体には
  *   z-index/pointer-eventsの特別な指定が一切不要になる(通常のflow配置のまま)。
+ *
+ * タスク7-3(公開ページのデザイン刷新)での見た目変更:
+ * - 見本(docs/design/phase7-ui-mock.html「2. PC表示」)のサイドバー(青地+網点模様、
+ *   上部にロゴ、見出し「VIDEOS 紹介した動画」)に合わせる。幅(w-72)・DOM構造・
+ *   data-testid・クリック挙動は変更しない(DetailSheet側のmd:left-72オフセット計算に
+ *   影響しないようにするため)。
+ * - 選択中の動画カードは見本と同じくクリームの地+黄色の縁取り(box-shadow)+ずらした影に
+ *   する。ロゴはsrc/components/brand/Wordmarkを再利用し、アニメーションなし
+ *   (animate指定なし=既定false)の静止表示にする。
  */
+import { Wordmark } from "@/components/brand/Wordmark";
 import { formatDateJa } from "@/lib/date-format";
 import { buildYoutubeThumbnailUrl } from "@/lib/youtube";
 import type { Video } from "@/types/video";
@@ -55,20 +65,20 @@ export function VideoSidebar({ videos, selectedVideoId, onVideoClick }: VideoSid
   return (
     <aside
       data-testid={VIDEO_SIDEBAR_TEST_ID}
-      className="hidden h-full w-72 shrink-0 flex-col overflow-y-auto border-r border-zinc-200 bg-white md:flex dark:border-zinc-800 dark:bg-zinc-950"
+      className="brand-dot-pattern hidden h-full w-72 shrink-0 flex-col overflow-y-auto bg-brand-blue text-white md:flex"
     >
-      <h2 className="border-b border-zinc-100 px-4 py-3 text-sm font-semibold text-zinc-900 dark:border-zinc-900 dark:text-zinc-50">
-        動画一覧
+      <div className="border-b border-white/15 px-4 py-4">
+        <Wordmark className="text-[3.6rem]" />
+      </div>
+      <h2 className="font-brand-display px-4 pt-4 pb-1.5 text-xs font-black tracking-[0.12em] text-brand-yellow">
+        VIDEOS 紹介した動画
       </h2>
       {videos.length === 0 ? (
-        <p
-          data-testid="sidebar-video-empty"
-          className="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400"
-        >
+        <p data-testid="sidebar-video-empty" className="px-4 py-3 text-sm text-white/80">
           公開済みの動画がありません。
         </p>
       ) : (
-        <ul className="flex flex-col">
+        <ul className="flex flex-col gap-1.5 px-2.5 pb-4">
           {videos.map((video) => {
             const isSelected = video.id === selectedVideoId;
             return (
@@ -79,8 +89,10 @@ export function VideoSidebar({ videos, selectedVideoId, onVideoClick }: VideoSid
                   data-video-id={video.id}
                   data-selected={isSelected ? "true" : "false"}
                   onClick={() => onVideoClick(video.id)}
-                  className={`flex w-full items-start gap-3 border-b border-zinc-100 px-4 py-3 text-left transition-colors hover:bg-zinc-50 dark:border-zinc-900 dark:hover:bg-zinc-900 ${
-                    isSelected ? "bg-orange-50 dark:bg-orange-950" : ""
+                  className={`flex w-full items-start gap-2.5 rounded-xl p-2.5 text-left transition-colors ${
+                    isSelected
+                      ? "bg-brand-paper text-brand-ink shadow-[0_0_0_3px_var(--brand-yellow),0_4px_0_3px_var(--brand-blue-deep)]"
+                      : "text-white hover:bg-white/10"
                   }`}
                 >
                   {/* i.ytimg.com はnext.config.tsの画像許可ドメイン未整備のためimgを使用(DetailSheet.tsxと同方針) */}
@@ -89,16 +101,15 @@ export function VideoSidebar({ videos, selectedVideoId, onVideoClick }: VideoSid
                     data-testid="sidebar-video-thumbnail"
                     src={buildYoutubeThumbnailUrl(video.id)}
                     alt={video.title}
-                    className="h-14 w-24 shrink-0 rounded object-cover"
+                    className="h-14 w-24 shrink-0 rounded-lg object-cover"
                   />
                   <div className="flex flex-1 flex-col gap-1">
-                    <span
-                      data-testid="sidebar-video-title"
-                      className="text-sm font-medium text-zinc-900 dark:text-zinc-50"
-                    >
+                    <span data-testid="sidebar-video-title" className="text-sm font-bold">
                       {video.title}
                     </span>
-                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    <span
+                      className={`text-xs tabular-nums ${isSelected ? "text-brand-ink-soft" : "text-white/75"}`}
+                    >
                       {formatDateJa(video.publishedAt)}
                     </span>
                   </div>

@@ -126,12 +126,26 @@
  *   常にマウントしたままなので、ファーストビュー表示中も裏側で読み込みが進む
  *   (requirements.md「ファーストビュー表示中も地図画面はその裏で読み込んでおき、
  *   切り替え後すぐ使えるようにする」に対応)。
+ *
+ * タスク7-3で追加したモバイルヘッダー・見た目の刷新:
+ * - src/components/map/MobileHeader.tsx をモバイル幅(md未満)のみ表示する要素として、
+ *   絞り込み帯(filterBarRef)の直前に配置する(通常のflexアイテムとして。position:fixed等は
+ *   使わない)。デスクトップ幅では`md:hidden`により非表示になるため、既存のPC側レイアウト
+ *   (VideoSidebar+地図)には何の影響も与えない。絞り込み帯の実測高さ(filterBarHeightPx)・
+ *   DetailSheetの最大高さ計算(P-029)はこのヘッダーの追加後も変わらず正しく動作する
+ *   (DetailSheetは画面下端に固定表示されるため。MobileHeader.tsxのコメント参照)。
+ * - <main>自体に見本(docs/design/phase7-ui-mock.html)のクリーム地・墨文字・本文書体
+ *   (Zen Maru Gothic)を明示的に指定する(requirements.md 3.1.1のベース色・書体、
+ *   タスク7-3完了条件「ダーク表示は不要(ライト固定でよい)」に対応)。管理画面(/admin)は
+ *   このレイアウトの外(src/app/admin/layout.tsx配下)にあり、既存の配色を保ったまま
+ *   影響を受けない。
  */
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FirstView } from "@/components/brand/FirstView";
 import { DetailSheet } from "@/components/map/DetailSheet";
+import { MobileHeader } from "@/components/map/MobileHeader";
 import { MobileTabBar, type MobileTab } from "@/components/map/MobileTabBar";
 import { MobileVideoList } from "@/components/map/MobileVideoList";
 import { PerformerFilter } from "@/components/map/PerformerFilter";
@@ -170,7 +184,7 @@ const PublicMap = dynamic(() => import("@/components/map/PublicMap").then((mod) 
   loading: () => (
     <div
       data-testid="public-map-loading"
-      className="flex h-full w-full items-center justify-center text-sm text-zinc-500 dark:text-zinc-400"
+      className="flex h-full w-full items-center justify-center text-sm text-brand-ink-soft"
     >
       地図を読み込み中...
     </div>
@@ -226,6 +240,19 @@ export default function Home() {
   // 伸びてもDetailSheetの上端が絞り込み帯の下端より上に来ることがなくなり、両者は画面座標上で
   // 重ならなくなる(絞り込み帯は常に全項目がクリックでき、DetailSheetは必要なら内部スクロール
   // (既存のoverflow-y-auto)で対応する)。
+  //
+  // タスク7-3で追加したMobileHeader(モバイル幅のみ表示)への対応: このrefは
+  // MobileHeaderと絞り込み帯(PerformerFilter+TagFilter)の両方を含む外側のdivに付ける
+  // (下のJSX参照)。MobileHeaderを絞り込み帯の外(refの外)に置くと、その高さ分だけ
+  // 画面上の絞り込み帯の実際の位置が下にずれるにもかかわらずfilterBarHeightPxに
+  // 反映されず、DetailSheetの最大高さ計算がMobileHeaderの高さを考慮しないまま
+  // (前述のP-029と同じ構造で)両者が再び重なってしまう(daychi-impl検証中に実機で
+  // 再現・特定。e2e/detail-sheet.spec.ts「閉じるボタンで詳細シートが閉じる」・
+  // e2e/mobile-filter-overlap.spec.tsがモバイルで"intercepts pointer events"により
+  // タイムアウトすることで検出した)。MobileHeaderをrefの内側に含めることで、
+  // filterBarHeightPxが「ヘッダー+絞り込み帯」の合計高さになり、DetailSheetの上端が
+  // 常にその下に来るようになる(デスクトップではMobileHeaderは`md:hidden`で高さ0のため
+  // この変更による影響はない)。
   const filterBarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const element = filterBarRef.current;
@@ -350,7 +377,7 @@ export default function Home() {
   return (
     <main
       data-testid="public-map-page"
-      className="flex h-dvh w-full flex-col overflow-hidden md:flex-row"
+      className="font-brand-body flex h-dvh w-full flex-col overflow-hidden bg-brand-paper text-brand-ink md:flex-row"
     >
       <VideoSidebar
         videos={sortedVideos}
@@ -358,20 +385,26 @@ export default function Home() {
         onVideoClick={handleVideoClick}
       />
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        {/* max-h-[30dvh] overflow-y-auto: タスク6-3a(P-029)対応。出演者/タグの選択肢が
-            多い場合(実測: 各10件程度でモバイル幅の高さの大半)でも、この帯自体の高さを
-            画面高さの30%までに抑えて地図の表示領域(下のrelative divのflex-1)を必ず
-            確保する。選択肢が多い分はこの帯の中で内部スクロールして選ぶ(既存の
-            DetailSheet.tsxのmax-h-[80vh]+overflow-y-autoと同じ「伸びうる内容は上限+内部
-            スクロールで扱う」方針を踏襲)。実測高さはfilterBarRef(下記useEffect参照)で
-            DetailSheetの最大高さ計算にも使われる */}
-        <div ref={filterBarRef} className="max-h-[30dvh] overflow-y-auto">
-          <PerformerFilter
-            performers={performers}
-            selectedPerformerIds={selectedPerformerIds}
-            onTogglePerformer={togglePerformerId}
-          />
-          <TagFilter tags={tags} selectedTagIds={selectedTagIds} onToggleTag={toggleTagId} />
+        {/* filterBarRef: MobileHeader+絞り込み帯の合計高さを実測する(上のuseEffectコメント
+            「タスク7-3で追加したMobileHeaderへの対応」参照)。MobileHeaderはmd:hiddenのため
+            デスクトップでは高さ0で測定される */}
+        <div ref={filterBarRef}>
+          <MobileHeader />
+          {/* max-h-[30dvh] overflow-y-auto: タスク6-3a(P-029)対応。出演者/タグの選択肢が
+              多い場合(実測: 各10件程度でモバイル幅の高さの大半)でも、この帯自体の高さを
+              画面高さの30%までに抑えて地図の表示領域(下のrelative divのflex-1)を必ず
+              確保する。選択肢が多い分はこの帯の中で内部スクロールして選ぶ(既存の
+              DetailSheet.tsxのmax-h-[80vh]+overflow-y-autoと同じ「伸びうる内容は上限+内部
+              スクロールで扱う」方針を踏襲)。実測高さはfilterBarRefでDetailSheetの
+              最大高さ計算にも使われる */}
+          <div className="max-h-[30dvh] overflow-y-auto">
+            <PerformerFilter
+              performers={performers}
+              selectedPerformerIds={selectedPerformerIds}
+              onTogglePerformer={togglePerformerId}
+            />
+            <TagFilter tags={tags} selectedTagIds={selectedTagIds} onToggleTag={toggleTagId} />
+          </div>
         </div>
         <div className="relative min-h-0 flex-1">
           {/* 地図ビュー: モバイルでは「地図」タブ選択時のみ表示(CSSのhiddenで切り替え、
