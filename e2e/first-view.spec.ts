@@ -215,6 +215,43 @@ test.describe("ファーストビュー(タスク7-2)", () => {
     expect(frames.some((frame) => frame.overlayCoversCenter)).toBe(false);
   });
 
+  test("タスク8-1: 1文字ずつ描かれる手書きアニメーションの経過をスクリーンショットで記録する", async ({
+    page,
+  }, testInfo) => {
+    // requirements.md 3.1.1(2026-10-01変更)「1文字ずつ順番に書いていく」の実装(タスク8-1)が
+    // 実際に時間をかけて1文字ずつ描かれていく様子を目視確認できるようにするための証跡テスト。
+    // 指定された経過時間(0.2/0.5/0.9/1.4/1.9/2.4秒)ごとにスクリーンショットを撮り、
+    // e2e/artifacts/impl-8-1/ へ保存する(daychi-reviewの確認観点の1つ)。
+    //
+    // この経過時間は「ある時点の見た目を記録する」こと自体が目的(アプリ側の状態遷移を
+    // 条件にポーリングできる類のものではなく、時間経過それ自体を観察する)であるため、
+    // 他のspecのように状態変化をexpect().toBeVisible()等でポーリングする方式は使えない。
+    // そのため、記録済みの基準時刻(start)からの残り時間をwaitForTimeoutで待つ
+    // (他specで禁止している「状態変化の確認を怠るための固定待ち」ではなく、
+    // 「決まった経過時間時点の見た目を記録する」というこのテスト固有の目的に対応する待機)。
+    await blockMapTiles(page);
+    const start = Date.now();
+    await page.goto("/");
+
+    const firstView = page.getByTestId("first-view");
+    await expect(firstView).toBeVisible();
+
+    const captureTimesMs = [200, 500, 900, 1400, 1900, 2400];
+    for (const targetMs of captureTimesMs) {
+      const remaining = targetMs - (Date.now() - start);
+      if (remaining > 0) {
+        await page.waitForTimeout(remaining);
+      }
+      // requirements.md「書き終わるまで約2.3秒、全体で約3秒で地図画面へ」の範囲内
+      // (captureTimesMsの最大値2400ms時点)では、まだファーストビューが表示中であるはずである
+      await expect(firstView).toBeVisible();
+      await page.screenshot({
+        path: `e2e/artifacts/impl-8-1/frame-${targetMs}ms-${testInfo.project.name}.png`,
+        fullPage: false,
+      });
+    }
+  });
+
   test("同じタブでの再読み込みではファーストビューが表示されない", async ({ page }) => {
     await blockMapTiles(page);
     await page.goto("/");

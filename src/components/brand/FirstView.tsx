@@ -30,12 +30,21 @@
  *   "hidden"にしてDOMから外す(CSSで既に見えなくなっているため、この後始末自体に
  *   ちらつき防止上の意味はないが、不要なタイマー等を止めるために行う)。
  * - ロゴの描画アニメーション自体は、上記の「オーバーレイの表示/非表示」とは別軸の関心事
- *   として扱う。Wordmarkは既定(animate=false)で「常に完全に描かれた最終状態」を表示する
- *   (これもSSR/初回描画から一貫しており、空白や壊れた見た目のフラッシュを避ける)。
- *   初回訪問と判定でき、かつ動きを減らす設定でない場合のみ、フォント読み込み完了
- *   (document.fonts.ready)を待ってからshouldAnimateをtrueにし、Wordmarkに
- *   「一度undrawn状態に戻して描き直す」アニメーションを再生させる(フォント読み込み前に
- *   フォールバック書体の字形で描画が始まり、読み込み完了後に字形が変わる違和感を避ける)。
+ *   として扱う。ただしタスク8-1のreview FAIL対応として、「アニメーションするかどうかの
+ *   判断が終わるまでロゴ自体を見せない」という制御を追加した(wordmarkPhase参照)。
+ *   旧実装(タスク7-2)はWordmarkを既定(animate=false)で「常に完全に描かれた最終状態」で
+ *   マウントし、判断が終わった後にanimate=trueへ切り替えていたため、判断が終わるまでの
+ *   短い間(フォント読み込み待ち等)に「完成形のロゴが一瞬見えてから、描画し直される
+ *   (undrawn状態に戻って再度トレースされる)」というフラッシュが発生していた
+ *   (2026-10-01ユーザーフィードバック)。
+ *   そのため、wordmarkPhaseを"pending"(SSR/初回描画の既定値。Wordmarkをvisible=falseで
+ *   マウントし、見た目には何も表示しない)→ 判断が終わった時点で"static"(動きを減らす設定。
+ *   visible=true・animate=falseで完成形を即時表示)または"animating"
+ *   (通常の設定。document.fonts.readyを待ってからvisible=true・animate=trueを同時に
+ *   立てる)のいずれかへ一度だけ遷移させる3状態に分ける。"pending"の間は利用者に
+ *   完成形も未完成形も一切見せないため、どちらの分岐でも「完成形→描き直し」のフラッシュが
+ *   発生しない(フォント読み込み前にフォールバック書体の字形が見えることも、
+ *   visible=falseのため同様に防げる)。
  * - 遷移(closing→hidden)は固定待ちやtransitionendイベントに依存せず、setTimeoutで
  *   駆動するstate machineとする。
  * - React 18のStrictMode(Next.jsの既定でdev時に有効)はマウント時に各useEffectを
@@ -61,6 +70,14 @@ const FADE_OUT_MS = 300;
 
 type Phase = "visible" | "closing" | "hidden";
 
+/**
+ * ロゴ(Wordmark)自体の表示状態(タスク8-1、上記コメント参照)。
+ * - "pending": 判断待ち。ロゴは見えない(visible=false)
+ * - "static": 動きを減らす設定。ロゴを完成形で即時表示(animate=false)
+ * - "animating": 通常の設定。フォント読み込み完了後、1文字ずつ書く演出を再生(animate=true)
+ */
+type WordmarkPhase = "pending" | "static" | "animating";
+
 /** document.fonts が使えない環境でも例外を投げずに解決するPromiseを返す */
 function waitForFontsReady(): Promise<unknown> {
   try {
@@ -77,7 +94,9 @@ export function FirstView() {
   // SSR/初回クライアント描画のどちらでも同じ値("visible")になる固定初期値
   // (フリッカー修正の要。上記コメント参照)
   const [phase, setPhase] = useState<Phase>("visible");
-  const [shouldAnimate, setShouldAnimate] = useState(false);
+  // SSR/初回クライアント描画のどちらでも同じ値("pending")になる固定初期値
+  // (上記コメント参照。判断が終わるまでロゴを一切見せない)
+  const [wordmarkPhase, setWordmarkPhase] = useState<WordmarkPhase>("pending");
 
   // マウント後(クライアントのみ)の判定。setState呼び出しはPromise.resolve().then()の中で行う
   // (react-hooks/set-state-in-effect対応。他のadmin画面の初回読み込みeffectと同じ設計。
@@ -106,11 +125,13 @@ export function FirstView() {
       }
       markFirstViewSeen();
       if (prefersReducedMotion()) {
-        // 最終状態(完全に描かれた状態)のまま。描画アニメーションは行わない
+        // 最終状態(完全に描かれた状態)を即時表示する。描画アニメーションは行わない
+        setWordmarkPhase("static");
         return;
       }
       waitForFontsReady().then(() => {
-        setShouldAnimate(true);
+        // visible=trueとanimate=trueを同時に立てるため、完成形が一瞬見えることはない
+        setWordmarkPhase("animating");
       });
     });
   }, []);
@@ -165,7 +186,11 @@ export function FirstView() {
         phase === "closing" ? "opacity-0" : "opacity-100"
       }`}
     >
-      <Wordmark animate={shouldAnimate} className="text-[clamp(4rem,14vw,8.5rem)]" />
+      <Wordmark
+        visible={wordmarkPhase !== "pending"}
+        animate={wordmarkPhase === "animating"}
+        className="text-[clamp(4rem,14vw,8.5rem)]"
+      />
       <span
         data-testid={FIRST_VIEW_SKIP_HINT_TEST_ID}
         className="absolute bottom-4 text-[0.78rem] text-[#6b6b6b]"
