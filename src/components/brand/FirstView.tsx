@@ -40,22 +40,80 @@
  *   そのため、wordmarkPhaseを"pending"(SSR/初回描画の既定値。Wordmarkをvisible=falseで
  *   マウントし、見た目には何も表示しない)→ 判断が終わった時点で"static"(動きを減らす設定。
  *   visible=true・animate=falseで完成形を即時表示)または"animating"
- *   (通常の設定。document.fonts.readyを待ってからvisible=true・animate=trueを同時に
+ *   (通常の設定。書体読み込み確認を待ってからvisible=true・animate=trueを同時に
  *   立てる)のいずれかへ一度だけ遷移させる3状態に分ける。"pending"の間は利用者に
  *   完成形も未完成形も一切見せないため、どちらの分岐でも「完成形→描き直し」のフラッシュが
  *   発生しない(フォント読み込み前にフォールバック書体の字形が見えることも、
  *   visible=falseのため同様に防げる)。
  * - 遷移(closing→hidden)は固定待ちやtransitionendイベントに依存せず、setTimeoutで
  *   駆動するstate machineとする。
+ *
+ * 設計判断(タスク8-1a、problem.txt P-033対応。2026-10-01、review FAIL 1回目を受けて再設計):
+ * - 旧実装(タスク8-1まで)は自動遷移のタイマー(AUTO_ADVANCE_MS=3000ms)を
+ *   「ファーストビューがマウントされた時点」から数えていた。一方、1文字ずつ書く演出
+ *   (wordmarkPhase="animating")は書体の読み込み完了を待ってから始まるため、書体の
+ *   読み込みに時間がかかる環境では「15文字を書き終える前に地図へ切り替わってしまう」
+ *   おそれがあった(ローカル・本番相当の実測でも余裕は約0.65秒しかなく、回線の遅い
+ *   スマホ等では容易に逆転しうる)。
+ * - 1回目の修正(document.fonts.readyを待ち、1.5秒を超えたら代替書体のまま完成形を
+ *   即時表示するフォールバック)はreview FAILとなった。理由は2つ:
+ *   (1) `document.fonts.ready`は「ページ上で現在マッチしている全ての書体」の読み込み
+ *       完了を待つに過ぎず、next/fontがFOUT対策として用意する「メトリクス調整された
+ *       フォールバック書体(例: "Oleo Script Fallback"。常に即座に読み込み済み扱い)」
+ *       だけで条件を満たしてしまい、実書体(Oleo Script/Vollkorn)への切り替わりを
+ *       検知できていなかった(Wordmark.tsxのWORDMARK_BIG_FONT_FAMILY等のコメント参照)。
+ *   (2) 1.5秒を超えた時点で「代替書体のまま完成形を表示する」フォールバック自体が、
+ *       要件「代替書体で崩れたロゴは一切見せない」に反していた。
+ *   この2点について2026-10-01にユーザー決定(requirements.md 3.1.1 2026-10-01決定):
+ *   「書体が届くまでロゴは出さず背景のみで待ち、届いたら手書きアニメーションを始める。
+ *   約3秒待っても届かない場合はロゴを出さずに地図へ進む」
+ * - そのため現在の実装は:
+ *   (a) `document.fonts.ready`ではなく`document.fonts.load()`/`check()`で、ロゴが実際に
+ *       使う書体(ファミリー名・太さ・文字)だけを明示的に指定して判定する
+ *       (areLogoFontsLoaded/waitForLogoFonts参照。Wordmark.tsxが公開する
+ *       WORDMARK_BIG_FONT_FAMILY等を使う)
+ *   (b) 書体が揃うまでの間はwordmarkPhase="pending"のまま(ロゴは一切見せない。
+ *       「静的な完成形をとりあえず代替書体で見せる」フォールバックは廃止した)
+ *   (c) 書体がFONT_GIVE_UP_MS(約3秒)以内に揃った場合のみ、動きを減らす設定なら
+ *       "static"(完成形を即時表示)、通常の設定なら"animating"(1文字ずつ書く)に遷移する。
+ *       自動遷移までの時間は設定によって異なる:
+ *       - 通常の設定: 書体が揃ってからWORDMARK_DRAW_DURATION_MS(約2.3秒の描画)+
+ *         HOLD_AFTER_LOGO_MS(約0.7秒)後
+ *       - 動きを減らす設定: requirements.md 3.1.1・タスク7-2「約3秒(またはタップ)で
+ *         切り替える」を維持するため(2026-10-02 coordinator指摘でタスク8-1a当初の実装を修正)、
+ *         マウントからの目標時刻を max(FONT_GIVE_UP_MS, 書体が揃った経過時間 +
+ *         HOLD_AFTER_LOGO_MS) とする。書体がすぐ揃えば従来通り約3秒待って切り替わり、
+ *         書体が揃うのが遅いほど「揃ってから少なくともHOLD_AFTER_LOGO_MSは見せる」側が優先される
+ *   (d) FONT_GIVE_UP_MSを超えても書体が揃わない場合は、動きを減らす設定かどうかに関わらず
+ *       ロゴを一切表示しないまま(wordmarkPhaseは"pending"のまま)地図画面へ進む
+ *   (e) (c)と(d)は互いに独立して解決しうるため、settledフラグで「先に確定した方を採用し、
+ *       後から来たもう一方は無視する」(例: 3秒あきらめた直後に書体読み込みが完了しても、
+ *       ロゴを表示する側へ後戻りしない。表示が二転三転するのを避けるため)
  * - React 18のStrictMode(Next.jsの既定でdev時に有効)はマウント時に各useEffectを
  *   「実行→クリーンアップ→再実行」する。sessionStorageの判定はmarkFirstViewSeen後の
  *   2回目の実行ではhasSeenFirstView()がtrueになるため早期returnし、タイマー/
  *   イベントリスナーもそれぞれのeffectのクリーンアップで確実に後始末されるため、
  *   二重登録・二重タイマーは発生しない。
+ *   このeffectにはあえてクリーンアップ関数を持たせない。StrictModeの
+ *   「実行→クリーンアップ→再実行」は実際の副作用(Promise.resolve().then()以降)が
+ *   動く前の同期フェーズで起きるため、もしここでクリーンアップ時にsettled等を
+ *   確定させてしまうと、1回目の実行自身の非同期処理(書体読み込み待ち・タイムアウト)を
+ *   動く前に無効化してしまい、dev環境でロゴが一切アニメーション/表示されなくなる
+ *   (decidedRefにより2回目の実行は何もしないため、1回目の実行だけが唯一有効な
+ *   処理であり、それを自分自身のクリーンアップで止めてはならない)。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Wordmark } from "@/components/brand/Wordmark";
+import {
+  Wordmark,
+  WORDMARK_BIG_FONT_FAMILY,
+  WORDMARK_BIG_FONT_WEIGHT,
+  WORDMARK_BIG_TEXT,
+  WORDMARK_DRAW_DURATION_MS,
+  WORDMARK_SMALL_FONT_FAMILY,
+  WORDMARK_SMALL_FONT_WEIGHT,
+  WORDMARK_SMALL_TEXT,
+} from "@/components/brand/Wordmark";
 import { hasSeenFirstView, markFirstViewSeen, prefersReducedMotion } from "@/lib/first-view";
 
 /** ファーストビュー全体のオーバーレイに付与するdata-testid */
@@ -63,8 +121,24 @@ export const FIRST_VIEW_TEST_ID = "first-view";
 /** 「タップでスキップ」の案内に付与するdata-testid */
 export const FIRST_VIEW_SKIP_HINT_TEST_ID = "first-view-skip-hint";
 
-/** 自動的に地図画面へ切り替わるまでの時間(requirements.md「約3秒」) */
-const AUTO_ADVANCE_MS = 3000;
+/**
+ * 書体の読み込みを待つ上限(ms)(タスク8-1a・problem.txt P-033、2026-10-01ユーザー決定
+ * 「約3秒待っても届かない場合はロゴを出さずに地図へ進む」)。
+ * これを超えても「ロゴが実際に使う書体(実書体。代替書体は含まない)」が揃わない場合は、
+ * 動きを減らす設定かどうかに関わらずロゴを一切表示せずに地図画面へ進む。
+ */
+const FONT_GIVE_UP_MS = 3000;
+/**
+ * ロゴの描画(アニメーションまたは静的な完成形表示)が確定してから、完成形を少し見せる
+ * ために待つ最低時間(ms)(タスク8-1a)。
+ * - 通常の設定: 書体の読み込みが正常な速さであれば
+ *   「WORDMARK_DRAW_DURATION_MS(約2.3秒)+ HOLD_AFTER_LOGO_MS(約0.7秒)」で
+ *   従来通りの「全体で約3秒」の体感を保つ
+ * - 動きを減らす設定: マウントからFONT_GIVE_UP_MS(約3秒)経っていればその時点で切り替え、
+ *   もし書体が揃うのがそれより遅ければ、揃ってから最低でもこのHOLD_AFTER_LOGO_MSは
+ *   完成形を見せてから切り替える(2026-10-02 coordinator指摘対応。詳細は上部のコメント参照)
+ */
+const HOLD_AFTER_LOGO_MS = 700;
 /** フェードアウトを開始してから地図画面へ完全に切り替える(DOMから外す)までの時間 */
 const FADE_OUT_MS = 300;
 
@@ -72,17 +146,54 @@ type Phase = "visible" | "closing" | "hidden";
 
 /**
  * ロゴ(Wordmark)自体の表示状態(タスク8-1、上記コメント参照)。
- * - "pending": 判断待ち。ロゴは見えない(visible=false)
- * - "static": 動きを減らす設定。ロゴを完成形で即時表示(animate=false)
- * - "animating": 通常の設定。フォント読み込み完了後、1文字ずつ書く演出を再生(animate=true)
+ * - "pending": 判断待ち、または書体を最後まで待てずにあきらめた。ロゴは見えない(visible=false)
+ * - "static": 動きを減らす設定で、かつ実書体が揃った。ロゴを完成形で即時表示(animate=false)
+ * - "animating": 通常の設定で、かつ実書体が揃った。1文字ずつ書く演出を再生(animate=true)
  */
 type WordmarkPhase = "pending" | "static" | "animating";
 
-/** document.fonts が使えない環境でも例外を投げずに解決するPromiseを返す */
-function waitForFontsReady(): Promise<unknown> {
+/**
+ * ロゴが実際に使う書体(Wordmark.tsxが公開する定数。詳しい経緯は上記コメント参照)を
+ * CSS Font Loading APIのfont省略形(スタイル名を含まないため"<weight> <size> <family>")
+ * に変換したもの。sizeの値自体はcheck/loadの判定結果に影響しない(任意の正数でよい)ため
+ * 固定値を使う。
+ */
+const BIG_FONT_SPEC = `${WORDMARK_BIG_FONT_WEIGHT} 16px "${WORDMARK_BIG_FONT_FAMILY}"`;
+const SMALL_FONT_SPEC = `${WORDMARK_SMALL_FONT_WEIGHT} 16px "${WORDMARK_SMALL_FONT_FAMILY}"`;
+
+/**
+ * ロゴが実際に使う書体(実書体。next/fontのメトリクス調整フォールバックは含まない)が、
+ * ロゴの文字を描画するのに必要な分だけ読み込み済みかどうかを判定する(タスク8-1a)。
+ * document.fontsが使えない環境では判定できないため、安全側(待たせない)に倒してtrueを返す。
+ */
+function areLogoFontsLoaded(): boolean {
+  try {
+    if (typeof document === "undefined" || !document.fonts) {
+      return true;
+    }
+    return (
+      document.fonts.check(BIG_FONT_SPEC, WORDMARK_BIG_TEXT) &&
+      document.fonts.check(SMALL_FONT_SPEC, WORDMARK_SMALL_TEXT)
+    );
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * ロゴが実際に使う書体の読み込みを開始し、完了を待つ(タスク8-1a)。
+ * document.fonts.load()はブラウザの通常の読み込みキュー(next/fontの<link rel="preload">等)
+ * に相乗りするため、既に読み込み中/読み込み済みであっても安全に呼べる(冪等)。
+ * document.fontsが使えない環境では判定自体ができないため、即座に解決する
+ * (この場合areLogoFontsLoaded()もtrueを返すため、呼び出し側はすぐ次に進む)。
+ */
+function waitForLogoFonts(): Promise<void> {
   try {
     if (typeof document !== "undefined" && document.fonts) {
-      return document.fonts.ready.catch(() => undefined);
+      return Promise.all([
+        document.fonts.load(BIG_FONT_SPEC, WORDMARK_BIG_TEXT).catch(() => undefined),
+        document.fonts.load(SMALL_FONT_SPEC, WORDMARK_SMALL_TEXT).catch(() => undefined),
+      ]).then(() => undefined);
     }
   } catch {
     // 何もしない。下のPromise.resolve()にフォールバックする
@@ -97,6 +208,10 @@ export function FirstView() {
   // SSR/初回クライアント描画のどちらでも同じ値("pending")になる固定初期値
   // (上記コメント参照。判断が終わるまでロゴを一切見せない)
   const [wordmarkPhase, setWordmarkPhase] = useState<WordmarkPhase>("pending");
+
+  const finish = useCallback(() => {
+    setPhase((current) => (current === "visible" ? "closing" : current));
+  }, []);
 
   // マウント後(クライアントのみ)の判定。setState呼び出しはPromise.resolve().then()の中で行う
   // (react-hooks/set-state-in-effect対応。他のadmin画面の初回読み込みeffectと同じ設計。
@@ -118,34 +233,82 @@ export function FirstView() {
       return;
     }
     decidedRef.current = true;
+    // 動きを減らす設定時の「約3秒」を測るための基準時刻(このeffectの開始 ≈
+    // オーバーレイがマウントされた時点。coordinator指摘対応。下記のreducedMotion分岐参照)
+    const mountedAt = Date.now();
+
+    /**
+     * 自動遷移のタイマーを(再)設定する(タスク8-1a)。ロゴの表示状態が確定した時点
+     * (アニメーション開始・静的表示・あきらめ)で呼ぶことで、「ファーストビューの表示開始」
+     * ではなく「ロゴの表示状態が確定した時点」を基準にできる。呼び出しは常に1回のみ
+     * (あきらめ/書体が揃ったのいずれか1つの分岐のみが実行されるため)なので、
+     * 多重にタイマーが走ることはない。
+     */
+    function scheduleAutoAdvance(delayMs: number): void {
+      setTimeout(finish, delayMs);
+    }
+
+    // 書体を待つことをあきらめるタイムアウトと、書体が実際に揃ったことの検知は互いに
+    // 独立して解決しうるため、先に確定した方だけを採用し、後から来たもう一方は無視する
+    let settled = false;
+    let giveUpTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
     Promise.resolve().then(() => {
       if (hasSeenFirstView()) {
         setPhase("hidden");
         return;
       }
       markFirstViewSeen();
-      if (prefersReducedMotion()) {
-        // 最終状態(完全に描かれた状態)を即時表示する。描画アニメーションは行わない
-        setWordmarkPhase("static");
-        return;
-      }
-      waitForFontsReady().then(() => {
-        // visible=trueとanimate=trueを同時に立てるため、完成形が一瞬見えることはない
-        setWordmarkPhase("animating");
+
+      const reducedMotion = prefersReducedMotion();
+
+      giveUpTimeoutId = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        // 書体がFONT_GIVE_UP_MSを超えても揃わない: 代替書体のロゴは一切見せず
+        // (wordmarkPhaseは"pending"のまま)、即座に地図画面へ進む
+        finish();
+      }, FONT_GIVE_UP_MS);
+
+      waitForLogoFonts().then(() => {
+        if (settled || !areLogoFontsLoaded()) {
+          // まだ実書体が揃っていない(load()のPromiseが解決しても、何らかの理由で
+          // check()がfalseを返す場合も含む)。giveUpTimeoutIdに判断を委ねる
+          return;
+        }
+        settled = true;
+        if (giveUpTimeoutId !== null) {
+          clearTimeout(giveUpTimeoutId);
+        }
+        // visible=trueと(必要なら)animate=trueを同時に立てるため、代替書体のロゴが
+        // 一瞬見えることはない
+        if (reducedMotion) {
+          setWordmarkPhase("static");
+          // requirements.md 3.1.1・タスク7-2「動きを減らす設定では完成形を表示し、
+          // 約3秒(またはタップ)で切り替える」を維持する(coordinator指摘対応、2026-10-02)。
+          // 書体が揃うタイミングによらず「マウントから約3秒」の体感を保ちたいため、
+          // 自動遷移の目標時刻(マウント基準)を max(FONT_GIVE_UP_MS, 書体が揃った経過時間 +
+          // HOLD_AFTER_LOGO_MS) とする。書体がすぐ揃えば従来通り約3秒待ってから切り替わり、
+          // 書体が揃うのがFONT_GIVE_UP_MSに近いほど「揃ってから少なくとも
+          // HOLD_AFTER_LOGO_MSは見せてから切り替える」側が優先される
+          const elapsedSinceMount = Date.now() - mountedAt;
+          scheduleAutoAdvance(Math.max(FONT_GIVE_UP_MS - elapsedSinceMount, HOLD_AFTER_LOGO_MS));
+        } else {
+          setWordmarkPhase("animating");
+          scheduleAutoAdvance(WORDMARK_DRAW_DURATION_MS + HOLD_AFTER_LOGO_MS);
+        }
       });
     });
-  }, []);
+  }, [finish]);
 
-  const finish = useCallback(() => {
-    setPhase((current) => (current === "visible" ? "closing" : current));
-  }, []);
-
-  // 自動遷移タイマーと、キーボード操作(Enter/Space/Escape)での即時遷移
+  // キーボード操作(Enter/Space/Escape)での即時遷移。自動遷移のタイマーは上のeffectで
+  // ロゴの表示状態が確定した時点でscheduleAutoAdvanceするため、ここでは持たない(タスク8-1a)
   useEffect(() => {
     if (phase !== "visible") {
       return;
     }
-    const timer = setTimeout(finish, AUTO_ADVANCE_MS);
     function handleKeyDown(event: KeyboardEvent): void {
       if (event.key === "Enter" || event.key === " " || event.key === "Escape") {
         finish();
@@ -153,7 +316,6 @@ export function FirstView() {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => {
-      clearTimeout(timer);
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [phase, finish]);

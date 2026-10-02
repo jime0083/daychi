@@ -78,6 +78,20 @@ const VIEWBOX_HEIGHT = 124;
  */
 const CHAR_STAGGER_MS = 150;
 
+/**
+ * 1文字の描画アニメーションの総時間(ms)。Wordmark.module.cssの
+ * wordmarkStrokeDraw(140ms)の後、wordmarkStrokeThicken(50ms)とwordmarkFillIn(80ms)が
+ * 並行して走る(Wordmark.module.cssのコメント参照)ため、トレース後に残るのはその大きい方。
+ * 値を変える場合はWordmark.module.cssの該当アニメーションのdurationも合わせて変更すること
+ * (タスク8-1a: FirstView.tsxがWORDMARK_DRAW_DURATION_MS経由でこの値を使い、全文字の
+ * 描画完了時刻を見積もって自動遷移のタイミングを決めるため、こことCSSの値がずれると
+ * 「書き終わる前に地図へ切り替わる」問題(P-033)が再発する)。
+ */
+const STROKE_DRAW_MS = 140;
+const STROKE_THICKEN_MS = 50;
+const FILL_MS = 80;
+const PER_LETTER_TOTAL_MS = STROKE_DRAW_MS + Math.max(STROKE_THICKEN_MS, FILL_MS);
+
 interface WordSpec {
   text: string;
   x: number;
@@ -91,6 +105,64 @@ const WORDS: readonly WordSpec[] = [
   { text: "COFFEE", x: -17, y: 86, fontSize: 34, size: "small" },
   { text: "MAP", x: 195, y: 86, fontSize: 34, size: "small" },
 ];
+
+const WORDMARK_LETTER_COUNT = WORDS.reduce((sum, word) => sum + word.text.length, 0);
+
+/**
+ * ロゴが実際に使う書体(ファミリー名・太さ)と、その書体で描画する文字列(タスク8-1a、
+ * problem.txt P-033 review FAIL 1回目対応)。
+ *
+ * review FAIL 1回目(2026-10-01)で、書体の読み込み待ち中に代替書体(フォールバック)で
+ * 崩れたロゴが表示される不具合が見つかった。原因は、判定に`document.fonts.ready`
+ * (ページ上で現在マッチしている「全ての」書体の読み込み完了を待つ。本文の日本語
+ * Zen Maru GothicのCJK分割ファイル約370個も含まれ、ロゴとは無関係に待たされうる上、
+ * 「読み込み完了」が「実際にロゴの字形(Oleo Script/Vollkornの実書体)に切り替わったか」を
+ * 保証しない)を使っていたことにある。next/fontはFOUT対策として、指定した書体
+ * (例: "Oleo Script")と同名のCSS変数に、実書体と「メトリクス調整したフォールバック
+ * (例: "Oleo Script Fallback"という別ファミリー名の、実在のシステム書体を文字の
+ * 高さ/送り幅だけ本物に似せた代替物。字形そのものは全くの別物)」を並べて設定する
+ * (`--font-oleo-script: "Oleo Script", "Oleo Script Fallback";`。実機確認済み)。
+ * `document.fonts.ready`は「どちらか一方が読み込み済みであれば満たされる現在の
+ * フォントマッチング状態」を見ているに過ぎず、フォールバック(常に即座に「読み込み済み」
+ * 扱いになる)だけで条件を満たしてしまうため、実書体への切り替わりを検知できていなかった。
+ *
+ * そこでFirstView.tsxは、`document.fonts.load()`/`check()`に「実書体のファミリー名
+ * (フォールバックを含まない)・太さ・実際にロゴが使う文字」を明示的に指定して判定する
+ * (CSS Font Loading APIの仕様上、familyに具体的なファミリー名を1つだけ指定し、
+ * textに実際の文字を渡すことで、その文字の描画に必要な@font-face
+ * (unicode-rangeで文字をカバーする面。例: Oleo Script/Vollkornはどちらも基本ラテン
+ * 文字用の"U+0-FF"面と、他の言語用の面とで複数の@font-faceに分かれている。実機確認済み)
+ * だけを対象に読み込み状態を判定できる)。
+ *
+ * ファミリー名・太さは、src/app/layout.tsxのnext/font/google宣言
+ * (Oleo_Script({ weight: "700" })・Vollkorn({ weight: "900" }))と対応している
+ * (Google Fontsの実際のファミリー名がそのままnext/fontの公開名になる。実機確認済み)。
+ * 値を変える場合はlayout.tsxの宣言も合わせて変更すること。
+ */
+export const WORDMARK_BIG_FONT_FAMILY = "Oleo Script";
+export const WORDMARK_BIG_FONT_WEIGHT = 700;
+export const WORDMARK_SMALL_FONT_FAMILY = "Vollkorn";
+export const WORDMARK_SMALL_FONT_WEIGHT = 900;
+/** Oleo Script(big)で実際に描画する文字列(WORDSから導出。文字が変わっても追従する) */
+export const WORDMARK_BIG_TEXT = WORDS.filter((word) => word.size === "big")
+  .map((word) => word.text)
+  .join("");
+/** Vollkorn(small)で実際に描画する文字列(WORDSから導出。文字が変わっても追従する) */
+export const WORDMARK_SMALL_TEXT = WORDS.filter((word) => word.size === "small")
+  .map((word) => word.text)
+  .join("");
+
+/**
+ * animate=trueにしてから、全15文字の描画(縁取りのトレース→塗りのフェードイン)が
+ * 完全に終わるまでにかかる時間(ms)(タスク8-1a・P-033対応)。
+ * 最後の文字の開始時刻(CHAR_STAGGER_MS × (文字数-1))に、1文字の描画総時間を足した値。
+ * FirstView.tsxは、この時間が経過してから少し完成形を見せる猶予(hold)を挟んで
+ * 自動的に地図画面へ切り替える(自動遷移のタイマーをファーストビューの表示開始ではなく
+ * 「描画が終わる時刻」基準にすることで、書体の読み込みが遅れても書き終える前に
+ * 切り替わらないようにする)。
+ */
+export const WORDMARK_DRAW_DURATION_MS =
+  CHAR_STAGGER_MS * (WORDMARK_LETTER_COUNT - 1) + PER_LETTER_TOTAL_MS;
 
 interface PositionedLetter {
   char: string;
