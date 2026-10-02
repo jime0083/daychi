@@ -32,8 +32,15 @@ test.describe("メタ情報", () => {
     );
     expect(iconHrefs.some((href) => href.includes("/favicon.ico"))).toBe(false);
 
-    // icon.svg由来のfaviconが正しく出力されていることを確認する
-    expect(iconHrefs.some((href) => href.includes("/icon.svg"))).toBe(true);
+    // タスク8-3(P-032とは別件、DayChi COFFEE CHANNELのロゴ画像への差し替え):
+    // icon.png(src/app/icon.png。ユーザー提供画像をそのまま使用)由来のfaviconが
+    // 正しく出力されていること、そのURLが実際に200でimage/pngを返すことを確認する
+    const iconHref = iconHrefs.find((href) => href.includes("/icon.png"));
+    expect(iconHref).toBeDefined();
+
+    const iconResponse = await page.request.get(iconHref as string);
+    expect(iconResponse.status()).toBe(200);
+    expect(iconResponse.headers()["content-type"]).toBe("image/png");
 
     // /favicon.ico に直接アクセスしても、create-next-app標準ロゴ(25931バイトのico)が
     // 配信されないことを確認する(favicon.ico自体が存在しなくなった=404であればOK)

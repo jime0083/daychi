@@ -84,7 +84,33 @@
  * - 閉じるボタンの見た目のみ「閉じる」の文字から「×」記号に変更する(aria-label="閉じる"は
  *   維持するため、アクセシブルな名前は変わらない。E2Eはdata-testidのみで特定しているため
  *   影響なし)。
+ *
+ * タスク8-2(P-032対応・requirements.md 3.1「詳細シートの動画サムネイルは動画と同じ16:9の
+ * 比率で全体を表示する(切り取らない)」2026-10-01決定):
+ * - サムネイル(detail-sheet-thumbnail)の表示枠を、高さ固定(h-24)からaspect-video(=16:9)の
+ *   枠に変更する。fit方式はobject-cover(コーディネーターのレビュー指摘により、当初実装の
+ *   object-containから変更)。hqdefault.jpgの実ファイルは480x360(4:3)だが、これは
+ *   「16:9の実際の映像フレーム(480x270)の上下に45pxずつ黒帯を足したもの」であり、
+ *   480x360を16:9の枠幅に合わせてスケールしてから高さ方向にcoverで切り詰めると、
+ *   ちょうどこの上下の黒帯(スケール後45px相当)だけが切り取られ、実際の映像フレームは
+ *   一切欠けずに枠いっぱいに表示される(計算: 枠幅Wに合わせた素のスケール後の高さは
+ *   360*(W/480)=0.75W、16:9枠の高さは0.5625Wなので差分0.1875W=元画像換算90px=上下45pxずつ。
+ *   これは黒帯の高さと一致する)。object-containだと黒帯ごと表示されてしまい映像が
+ *   実際より小さく見える上に枠の左右に余白(ピラーボックス)ができるため不採用。
+ *   枠を満たすためobject-cover採用に伴い背景の塗り(bg-brand-ink/5)は不要になり削除した。
+ *   仮にサムネイルURLの実体が将来16:9そのものになった場合も、object-coverは
+ *   そのまま枠いっぱいに表示するだけで映像の一部を余分に切り取ることはない。
+ * - モバイルでは、シートの最大高さの上限(従来80vh固定)を外し、絞り込み欄
+ *   (filterBarHeightPx。P-029参照)に重ならない範囲でシートを大きく表示できるようにする。
+ *   PC(md以上)は従来どおり80vhを上限として残す(requirements.md「PCでは…従来どおり」)。
+ *   TailwindのJITは動的なpx値を含むarbitrary値クラス(例: max-h-[calc(100dvh-${x}px)])を
+ *   ビルド時に検出できないため(このファイルの既存コメント参照)、filterBarHeightPxは
+ *   CSS変数(--detail-sheet-filter-bar-height)としてinline styleで渡し、実際のmax-height
+ *   計算はsrc/app/globals.cssの`.detail-sheet-panel`クラス(ブレークポイントごとの
+ *   @media規則を含む)に委譲する。
  */
+import type { CSSProperties } from "react";
+
 import { CameraIcon } from "@/components/icons/CameraIcon";
 import type { Performer } from "@/types/performer";
 import type { Shop } from "@/types/shop";
@@ -114,6 +140,15 @@ interface DetailSheetProps {
   filterBarHeightPx: number;
   onClose: () => void;
 }
+
+/**
+ * 絞り込み帯の実測高さ(filterBarHeightPx)をCSS変数として渡すための型(タスク8-2・P-032)。
+ * 実際のmax-height計算はsrc/app/globals.cssの`.detail-sheet-panel`に委譲する
+ * (このファイル冒頭のコメント参照)。
+ */
+type DetailSheetPanelStyle = CSSProperties & {
+  "--detail-sheet-filter-bar-height": string;
+};
 
 /** performerIdを出演者名に解決する。見つからない場合(削除済み等)のフォールバック文言を返す */
 function resolvePerformerName(performers: Performer[], performerId: string): string {
@@ -151,14 +186,16 @@ export function DetailSheet({
         data-testid="detail-sheet"
         aria-hidden={!isOpen}
         // md:left-72: オーバーレイと同じ理由(上のコメント参照)。
-        // style.maxHeight: タスク6-3a(P-029)対応。従来のTailwindクラス(max-h-[80vh])を
-        // インラインstyleに置き換え、80vhという上限(通常時の挙動は変えない)を維持しつつ、
-        // 絞り込み帯の実測高さ(filterBarHeightPx)を画面高さから差し引いた残り分でも
-        // 追加的に制限する(min()で両者のうち小さい方を採用)。絞り込み帯が伸びた場合は
-        // こちらが効いてシートが短くなり、絞り込み帯と重ならなくなる
-        // (DetailSheetPropsのコメント参照)
-        style={{ maxHeight: `min(80vh, calc(100dvh - ${filterBarHeightPx}px))` }}
-        className={`fixed inset-x-0 bottom-0 z-50 overflow-y-auto rounded-t-2xl bg-brand-paper text-brand-ink shadow-[0_-6px_0_var(--brand-yellow),0_-10px_30px_rgba(0,0,0,0.18)] transition-transform duration-300 ease-out md:left-72 ${
+        // --detail-sheet-filter-bar-height: タスク6-3a(P-029)・タスク8-2(P-032)対応。
+        // 絞り込み帯の実測高さ(filterBarHeightPx)をCSS変数で渡し、実際のmax-height計算は
+        // globals.cssの`.detail-sheet-panel`(モバイル/PCでブレークポイントが異なる。
+        // このファイル冒頭のコメント参照)に委譲する
+        style={
+          {
+            "--detail-sheet-filter-bar-height": `${filterBarHeightPx}px`,
+          } as DetailSheetPanelStyle
+        }
+        className={`detail-sheet-panel fixed inset-x-0 bottom-0 z-50 overflow-y-auto rounded-t-2xl bg-brand-paper text-brand-ink shadow-[0_-6px_0_var(--brand-yellow),0_-10px_30px_rgba(0,0,0,0.18)] transition-transform duration-300 ease-out md:left-72 ${
           isOpen ? "translate-y-0" : "pointer-events-none translate-y-full"
         }`}
       >
@@ -212,14 +249,24 @@ export function DetailSheet({
                       rel="noopener"
                       className="block w-full shrink-0 sm:w-40"
                     >
-                      {/* i.ytimg.com はnext.config.tsの画像許可ドメイン未整備のためimgを使用(src/app/admin/videos/page.tsxと同方針) */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        data-testid="detail-sheet-thumbnail"
-                        src={buildYoutubeThumbnailUrl(video.id)}
-                        alt={video.title}
-                        className="h-24 w-full rounded-lg object-cover sm:w-40"
-                      />
+                      {/*
+                        タスク8-2(P-032): サムネイルの表示枠を16:9(aspect-video)に固定し、
+                        object-coverで表示する(ファイル冒頭コメント参照。hqdefault.jpgの
+                        上下の黒帯だけが切り取られ、実際の映像フレームは欠けずに枠いっぱいに
+                        表示される)。枠はdetail-sheet-thumbnail自体(imgのボックスはaspect-video
+                        で16:9になる。object-coverは枠内の見た目の拡大縮小方法のみを変え、
+                        ボックス自体のgetBoundingClientRectは16:9を保つ)
+                      */}
+                      <div className="aspect-video w-full overflow-hidden rounded-lg">
+                        {/* i.ytimg.com はnext.config.tsの画像許可ドメイン未整備のためimgを使用(src/app/admin/videos/page.tsxと同方針) */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          data-testid="detail-sheet-thumbnail"
+                          src={buildYoutubeThumbnailUrl(video.id)}
+                          alt={video.title}
+                          className="h-full w-full object-cover object-center"
+                        />
+                      </div>
                     </a>
                     <div className="flex flex-1 flex-col gap-1">
                       <a

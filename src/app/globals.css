@@ -157,3 +157,27 @@ html[data-first-view="seen"] [data-testid="first-view"] {
 .map-pin[data-highlighted="true"] .map-pin-dot {
   fill: var(--brand-green);
 }
+
+/*
+ * 詳細シート(DetailSheet.tsx)の最大高さ(タスク8-2・P-032対応)。
+ * TailwindのJITは動的なpx値を含むarbitrary値クラス(例: max-h-[calc(100dvh-${x}px)])を
+ * ビルド時に検出できないため(DetailSheet.tsxの既存コメント参照)、絞り込み帯の実測高さは
+ * --detail-sheet-filter-bar-height というCSS変数でinline styleから渡し、実際のmax-height
+ * 計算はこちらのクラスで行う。
+ *
+ * requirements.md 3.1「スマホでは、絞り込み欄に重ならない範囲でシートを大きく表示できるように
+ * する」(2026-10-01決定)に対応し、モバイル(mdブレークポイント未満)では従来の80vh上限を外し、
+ * 画面高さから絞り込み帯の高さを引いた分だけシートを大きくできるようにする。PC(md以上)は
+ * requirements.mdの「PCでは…」の記載に変更がないため、従来どおり80vhを上限として残す
+ * (タスク6-3a・P-029の「絞り込み帯と重ならない」制約は、どちらの場合も
+ * calc(100dvh - 絞り込み帯高さ)の項で維持される)。
+ */
+.detail-sheet-panel {
+  max-height: calc(100dvh - var(--detail-sheet-filter-bar-height, 0px));
+}
+
+@media (min-width: 768px) {
+  .detail-sheet-panel {
+    max-height: min(80vh, calc(100dvh - var(--detail-sheet-filter-bar-height, 0px)));
+  }
+}

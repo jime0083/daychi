@@ -123,10 +123,24 @@ test.describe("スライドアップ詳細シート", () => {
     const entry = visitEntries.nth(0);
 
     // 動画サムネイル: i.ytimg.com のhqdefault.jpg
-    await expect(entry.getByTestId("detail-sheet-thumbnail")).toHaveAttribute(
+    const thumbnail = entry.getByTestId("detail-sheet-thumbnail");
+    await expect(thumbnail).toHaveAttribute(
       "src",
       "https://i.ytimg.com/vi/dAyChiTEST1/hqdefault.jpg",
     );
+
+    // タスク8-2(P-032、コーディネーターのレビュー指摘により修正): 表示枠は常に16:9
+    // (hqdefault.jpgの実ファイルは480x360=4:3だが、object-fitはcoverにする。coverで
+    // 16:9幅に合わせてスケールすると、ちょうどYouTube側が付けた上下の黒帯だけが
+    // 切り取られ、実際の映像フレームは欠けずに枠いっぱいに表示される。DetailSheet.tsx
+    // 冒頭コメント参照)
+    await expect(thumbnail).toHaveCSS("object-fit", "cover");
+    const thumbnailBox = await thumbnail.boundingBox();
+    expect(thumbnailBox).not.toBeNull();
+    if (thumbnailBox !== null) {
+      const ratio = thumbnailBox.width / thumbnailBox.height;
+      expect(ratio).toBeCloseTo(16 / 9, 1);
+    }
 
     // サムネイルリンク: youtube.com/watch のURLを新規タブ(target=_blank, rel=noopener)で開く
     const videoLink = entry.getByTestId("detail-sheet-video-link");
